@@ -1339,17 +1339,19 @@ class SemanticSegmentationArticulationDataset(SemanticSegmentationDataset):
                          is_elastic_distortion, color_drop, epoch, use_coarse_to_fine,
                          c2f_alpha, c2f_decay, c2f_rad, 
                          use_hierarchy)
-        self.load_articulation = load_articulation
+        self.load_articulation = load_articulation if self.mode != "test" else False
         
     def __getitem__(self, idx: int):
-        if self.load_articulation:
-            if self.use_hierarchy:
-                coordinates, features, labels, scene, raw_color, raw_normals, \
-                raw_coordinates, idx, coord_aug_info, interaction_ids \
+        if self.use_hierarchy:
+            coordinates, features, labels, scene, raw_color, raw_normals, \
+            raw_coordinates, idx, coord_aug_info, interaction_ids \
+            = super().__getitem__(idx)
+        else:
+            coordinates, features, labels, scene, raw_color, raw_normals, raw_coordinates, idx, coord_aug_info \
                 = super().__getitem__(idx)
-            else:
-                coordinates, features, labels, scene, raw_color, raw_normals, raw_coordinates, idx, coord_aug_info \
-                    = super().__getitem__(idx)
+        
+        
+        if self.load_articulation:
             articulation_file = self.data[idx]['articulation_gt_file']
             arti_anno = load_dict_from_h5file(articulation_file)
             if 'train' in self.mode:
@@ -1390,5 +1392,5 @@ class SemanticSegmentationArticulationDataset(SemanticSegmentationDataset):
                 return coordinates, features, labels, scene, raw_color, raw_normals, raw_coordinates, idx, arti_anno, mov_parts_centers
             
         else:
-            return super().__getitem__(idx)
+            return coordinates, features, labels, scene, raw_color, raw_normals, raw_coordinates, idx
             

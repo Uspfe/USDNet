@@ -192,10 +192,10 @@ def expand_instances_and_semantics(points, instance_ids, sem_ids, radius = 0.1, 
     return expand_dict
 
 class USDAParser:
-    def __init__(self, file_path, interaction_as_movement = False, exlude_stuff = False):
+    def __init__(self, file_path, interaction_as_movement = False, exclude_stuff = False):
         self.file_path = file_path
         self.interaction_as_movement = interaction_as_movement
-        self.exlude_stuff = exlude_stuff
+        self.exclude_stuff = exclude_stuff
         
         self.stage = Usd.Stage.Open(self.file_path)
         self.points = {}
@@ -337,7 +337,7 @@ class USDAParser:
                     'trace_list': trace_list
                     })
             else:
-                if not self.exlude_stuff:
+                if not self.exclude_stuff:
                     articulations.append({
                         'interactable_id': inter_id,
                         'movable_id': inter_id,
@@ -347,44 +347,56 @@ class USDAParser:
         return articulations
 class SceneParser:
     def __init__(self, scene_folder, downsample_voxel_size=0.02, 
-                 interaction_as_movement = False, exlude_stuff = False):
+                 interaction_as_movement = False, exclude_stuff = False, mode = "train", gt_annos_testset = False):
         self.scene_folder = scene_folder
         self.interaction_as_movement = interaction_as_movement
-        self.exlude_stuff = exlude_stuff
-        # get the file with ".usda" extension as usda file
-        usda_files = [f for f in os.listdir(scene_folder) if f.endswith('.usda')]
-        self.usda_file = osp.join(self.scene_folder, usda_files[0]) 
-        # load the usda file
-        self.usda_parser = USDAParser(self.usda_file, interaction_as_movement, exlude_stuff)
-        ## get articulations from usda
-        self.articulation_parts = self.usda_parser.get_articulations()
+        self.exclude_stuff = exclude_stuff
+        self.mode = mode
+        self.gt_annos_testset = gt_annos_testset
         
-        # load articulation parts and params
-        print("scene_folder: ", scene_folder)
-        articulation_file = [f for f in os.listdir(scene_folder) if f.endswith('.json')][0]
-        articulation_file = osp.join(scene_folder, articulation_file)
-        encoding = detect_encoding(articulation_file)
-        articulation_anno = None
-        try:
-            articulation_anno = json.load(open(articulation_file, 'r', encoding=encoding))
-        except json.JSONDecodeError:
-            print(f"[SKIPPED] Failed to parse {articulation_file}")
-        self.articulation_params = {}
-        for item in articulation_anno['data']['articulations']:
-            pid = item['pid']
-            type = item['type']
-            sem_id = sem_cate_to_id[type]
-            axis = item['axis']
-            origin = item['origin']
-            self.articulation_params[pid] = {
-                'sem_id': sem_id,
-                'axis': axis,
-                'origin': origin
-            }   
+        # load annotations
+        if self.mode != "test" or gt_annos_testset:
+            usda_files = [f for f in os.listdir(scene_folder) if f.endswith('.usda')] # get the file with ".usda" extension as usda file
+            self.usda_file = osp.join(self.scene_folder, usda_files[0]) 
+            # load the usda file
+            self.usda_parser = USDAParser(self.usda_file, interaction_as_movement, exclude_stuff)
+            ## get articulations from usda
+            self.articulation_parts = self.usda_parser.get_articulations()
+            
+            # load articulation parts and params
+            print("scene_folder: ", scene_folder)
+            articulation_file = [f for f in os.listdir(scene_folder) if f.endswith('.json')][0]
+            articulation_file = osp.join(scene_folder, articulation_file)
+            encoding = detect_encoding(articulation_file)
+            articulation_anno = None
+            try:
+                articulation_anno = json.load(open(articulation_file, 'r', encoding=encoding))
+            except json.JSONDecodeError:
+                print(f"[SKIPPED] Failed to parse {articulation_file}")
+            self.articulation_params = {}
+            for item in articulation_anno['data']['articulations']:
+                pid = item['pid']
+                type = item['type']
+                sem_id = sem_cate_to_id[type]
+                axis = item['axis']
+                origin = item['origin']
+                self.articulation_params[pid] = {
+                    'sem_id': sem_id,
+                    'axis': axis,
+                    'origin': origin
+                }   
+                
         # load mesh file
         self.mesh_file = osp.join(scene_folder, 'mesh_aligned_0.05.ply')
         self.mesh = o3d.io.read_point_cloud(self.mesh_file)
         self.mesh = self.mesh.voxel_down_sample(voxel_size=downsample_voxel_size)
+        # if self.mode != "test": # downsample the train and val set for training 
+        #     self.mesh = self.mesh.voxel_down_sample(voxel_size=downsample_voxel_size)
+        # else:
+        #     num_points_ori = np.array(self.mesh.points).shape
+        #     self.mesh = self.mesh.voxel_down_sample(voxel_size=0.01)
+        #     num_points_downsampled = np.array(self.mesh.points).shape
+        #     print("scene folder {} with shape {} downsampled to shape {}".format(scene_folder, num_points_ori, num_points_downsampled))
         self.mesh_points = np.array(self.mesh.points)
         self.mesh_colors = (np.array(self.mesh.colors) * 255.0).astype(np.int32)
         # calculate normals 
@@ -392,48 +404,53 @@ class SceneParser:
         self.mesh_normals = np.array(self.mesh.normals)
         self.mesh_kdtree = cKDTree(self.mesh_points)
         
-    def get_data(self, ignore_index=0):
+    def get_data(self, ignore_index=0, gt_annos_testset = False):
         num_points = self.mesh_points.shape[0]
         sem_gt = np.ones(num_points, dtype=np.int32) * ignore_index
         inst_gt = np.ones(num_points, dtype=np.int32) * ignore_index
         inter_gt = np.ones(num_points, dtype=np.int32) * ignore_index
+        
+        
         articulation_gt = {}
-        for articulation in self.articulation_parts:
-            inter_id = articulation['interactable_id']
-            mov_id = articulation['movable_id']
-            trace_list = articulation['trace_list']
+        if self.mode != "test" or gt_annos_testset:
+            for articulation in self.articulation_parts:
+                inter_id = articulation['interactable_id']
+                mov_id = articulation['movable_id']
+                trace_list = articulation['trace_list']
+                
+                if mov_id in self.articulation_params:
+                    sem_id = self.articulation_params[mov_id]['sem_id']
+                    axis = self.articulation_params[mov_id]['axis']
+                    origin = self.articulation_params[mov_id]['origin']
+                    
+                    indices = self.get_subset_pcl_indexs(inter_id)
+                    if len(indices) != 0:
+                        inter_gt[indices] = mov_id
+                    
+                    mov_mask = np.zeros(num_points, dtype=bool)
+                    if self.interaction_as_movement:
+                        mov_mask[indices] = True
+                    else:
+                        for trace_id in trace_list:
+                            indices = self.get_subset_pcl_indexs(trace_id)
+                            if len(indices) != 0:
+                                mov_mask[indices] = True
+                    sem_gt[mov_mask] = sem_id
+                    inst_gt[mov_mask] = mov_id
+                    articulation_gt[mov_id] = {
+                        'sem_id': sem_id,
+                        'axis': axis,
+                        'origin': origin
+                    }
+            # get interaction mask within each movable object
+            for mov_id in articulation_gt.keys():
+                indices = np.where(inst_gt == mov_id)[0]
+                inter_mask = inter_gt[indices] != ignore_index
+                articulation_gt[mov_id]['inter_mask'] = inter_mask
             
-            if mov_id in self.articulation_params:
-                sem_id = self.articulation_params[mov_id]['sem_id']
-                axis = self.articulation_params[mov_id]['axis']
-                origin = self.articulation_params[mov_id]['origin']
-                
-                indices = self.get_subset_pcl_indexs(inter_id)
-                if len(indices) != 0:
-                    inter_gt[indices] = mov_id
-                
-                mov_mask = np.zeros(num_points, dtype=bool)
-                if self.interaction_as_movement:
-                    mov_mask[indices] = True
-                else:
-                    for trace_id in trace_list:
-                        indices = self.get_subset_pcl_indexs(trace_id)
-                        if len(indices) != 0:
-                            mov_mask[indices] = True
-                sem_gt[mov_mask] = sem_id
-                inst_gt[mov_mask] = mov_id
-                articulation_gt[mov_id] = {
-                    'sem_id': sem_id,
-                    'axis': axis,
-                    'origin': origin
-                }
-        # get interaction mask within each movable object
-        for mov_id in articulation_gt.keys():
-            indices = np.where(inst_gt == mov_id)[0]
-            inter_mask = inter_gt[indices] != ignore_index
-            articulation_gt[mov_id]['inter_mask'] = inter_mask
         return self.mesh_points,self.mesh_colors, self.mesh_normals, \
         sem_gt, inst_gt, inter_gt, articulation_gt
+        
     def get_subset_pcl_indexs(self, mesh_id, downsample_voxel_size=0.01, tolerance = 2e-2):
         mesh_path = self.usda_parser.mesh_id_to_path[mesh_id]
         subset_mesh = self.usda_parser.points[mesh_path]
@@ -460,7 +477,8 @@ class Articulate3DPreprocessing(BasePreprocessing):
         n_jobs: int = -1,
         ignore_index: int = 0,
         interaction_as_movement: bool = False,
-        exlude_stuff: bool = False,
+        exclude_stuff: bool = False,
+        gt_annos_testset: bool = False
     ):
         super().__init__(data_dir, save_dir, modes, n_jobs)
         # meta data
@@ -468,7 +486,8 @@ class Articulate3DPreprocessing(BasePreprocessing):
         self.create_label_database(data_dir)
         self.modes = modes
         self.interaction_as_movement = interaction_as_movement
-        self.exlude_stuff = exlude_stuff
+        self.exclude_stuff = exclude_stuff
+        self.gt_annos_testset = gt_annos_testset
         # get scene ids
         for mode in self.modes:
             scans_file = osp.join(data_dir, "splits", splits[mode])
@@ -482,6 +501,7 @@ class Articulate3DPreprocessing(BasePreprocessing):
             # scans = os.listdir(scan_split_folder)
             # folders = []
             # for scan in scans:
+            #     scan_folder = osp.join(scan_split_folder, scan)
             #     scan_folder = osp.join(scan_split_folder, scan)
             #     folders.append(scan_folder)
             # self.files[mode] = natsorted(folders)
@@ -513,9 +533,9 @@ class Articulate3DPreprocessing(BasePreprocessing):
         scan_id = osp.basename(folderpath)
         scene_parser = SceneParser(folderpath,
                                    interaction_as_movement=self.interaction_as_movement,
-                                   exlude_stuff=self.exlude_stuff)
+                                   exclude_stuff=self.exclude_stuff, mode = mode, gt_annos_testset=self.gt_annos_testset)
         coords, colors, normals, sem_gt, \
-        inst_gt, inter_gt, articulation_gt = scene_parser.get_data()
+        inst_gt, inter_gt, articulation_gt = scene_parser.get_data(gt_annos_testset = self.gt_annos_testset)
         segments_placeholder = np.zeros_like(inst_gt)
         points = np.hstack([coords, colors, normals, sem_gt[..., None], inst_gt[..., None], segments_placeholder[..., None], inter_gt[..., None]])
         ## save points
@@ -527,42 +547,6 @@ class Articulate3DPreprocessing(BasePreprocessing):
             'raw_filepath': str(folderpath),
             "scene": scan_id,
         }
-        if not processed_filepath.parent.exists():
-            processed_filepath.parent.mkdir(parents=True, exist_ok=True)
-        np.save(processed_filepath, points.astype(np.float32))
-        filebase["filepath"] = str(processed_filepath)
-        
-        gt_labels = sem_gt * 1000 + inst_gt + 1
-        processed_gt_filepath = (
-            self.save_dir
-            / "instance_gt"
-            / mode
-            / (scan_id + ".txt")
-        )
-        if not processed_gt_filepath.parent.exists():
-            processed_gt_filepath.parent.mkdir(parents=True, exist_ok=True)
-        np.savetxt(processed_gt_filepath, gt_labels.astype(np.int32), fmt="%d")
-        filebase["instance_gt_filepath"] = str(processed_gt_filepath)
-        
-        # if self.interaction_as_movement:
-        ## save expand_dict
-        expand_dict = expand_instances_and_semantics(coords, inter_gt, sem_gt)
-        expand_dict_file = (
-            self.save_dir
-            / "expand_dict"
-            / (scan_id + ".pkl")
-        )
-        if not expand_dict_file.parent.exists():
-            expand_dict_file.parent.mkdir(parents=True, exist_ok=True)
-        filebase['expand_dict_file'] = str(expand_dict_file)
-        with open(expand_dict_file, "wb") as f:
-            pickle.dump(expand_dict, f)
-        
-        # save articulation info
-        articulation_file = osp.join(self.save_dir, mode, scan_id + '_articulation.h5')
-        save_dict_to_h5file(articulation_gt, articulation_file)
-        filebase["articulation_gt_file"] = str(articulation_file)
-
         filebase["color_mean"] = [
             float((colors[:, 0] / 255).mean()),
             float((colors[:, 1] / 255).mean()),
@@ -573,6 +557,46 @@ class Articulate3DPreprocessing(BasePreprocessing):
             float(((colors[:, 1] / 255) ** 2).mean()),
             float(((colors[:, 2] / 255) ** 2).mean()),
         ]
+        
+        if not processed_filepath.parent.exists():
+            processed_filepath.parent.mkdir(parents=True, exist_ok=True)
+        np.save(processed_filepath, points.astype(np.float32))
+        filebase["filepath"] = str(processed_filepath)
+        
+        if ( not self.gt_annos_testset) and mode == "test": # when the test set anno is unavailable 
+            pass
+        else:
+            gt_labels = sem_gt * 1000 + inst_gt + 1
+            processed_gt_filepath = (
+                self.save_dir
+                / "instance_gt"
+                / mode
+                / (scan_id + ".txt")
+            )
+            if not processed_gt_filepath.parent.exists():
+                processed_gt_filepath.parent.mkdir(parents=True, exist_ok=True)
+            np.savetxt(processed_gt_filepath, gt_labels.astype(np.int32), fmt="%d")
+            filebase["instance_gt_filepath"] = str(processed_gt_filepath)
+            
+            # if self.interaction_as_movement:
+            ## save expand_dict
+            expand_dict = expand_instances_and_semantics(coords, inter_gt, sem_gt)
+            expand_dict_file = (
+                self.save_dir
+                / "expand_dict"
+                / (scan_id + ".pkl")
+            )
+            if not expand_dict_file.parent.exists():
+                expand_dict_file.parent.mkdir(parents=True, exist_ok=True)
+            filebase['expand_dict_file'] = str(expand_dict_file)
+            with open(expand_dict_file, "wb") as f:
+                pickle.dump(expand_dict, f)
+            
+            # save articulation info
+            articulation_file = osp.join(self.save_dir, mode, scan_id + '_articulation.h5')
+            save_dict_to_h5file(articulation_gt, articulation_file)
+            filebase["articulation_gt_file"] = str(articulation_file)
+
         return filebase
 
     def compute_color_mean_std(

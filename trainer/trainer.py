@@ -203,7 +203,7 @@ class InstanceSegmentation(pl.LightningModule):
             raise RuntimeError("BATCH TOO BIG")
 
         if len(target) == 0:
-            print("no targets")
+            print("no targets - train")
             return None
 
         raw_coordinates = None
@@ -526,6 +526,10 @@ class InstanceSegmentation(pl.LightningModule):
         original_normals = data.original_normals
         original_coordinates = data.original_coordinates
         
+        if (len(target) == 0 or len(target_full) == 0) and (self.config.data.test_mode != "test"):
+            print("no targets  - eval")
+            return None 
+             
         if self.debug:
             import pickle
             save_dir = os.path.join( self.config.general.save_dir, "debug", 
@@ -539,16 +543,14 @@ class InstanceSegmentation(pl.LightningModule):
             coord_file = os.path.join(save_dir, f"{file_name}_coords.npy")
             arti_file = os.path.join(save_dir, f"{file_name}_artis.pkl")
             np.save(coord_file, coords)
-            if self.eval_articulation:
+            # save ground truth articulation annotation and coords if it's not in test mode
+            # as in test mode, annotation is not available
+            if self.eval_articulation and (self.config.data.test_mode != "test"):
                 articulation_dict_list = []
                 for target_item in target:
                     articulation_dict_list.append(target_item["articulations_dict"])
                 with open(arti_file, "wb") as f:
                     pickle.dump(articulation_dict_list, f)
-
-        if len(target) == 0 or len(target_full) == 0:
-           print("no targets")
-           return None
 
         if len(data.coordinates) == 0:
             return 0.0
@@ -632,21 +634,38 @@ class InstanceSegmentation(pl.LightningModule):
                 / (pca_features.max() - pca_features.min())
             )
 
-        self.eval_instance_step(
-            output,
-            target,
-            target_full,
-            inverse_maps,
-            file_names,
-            original_coordinates,
-            original_colors,
-            original_normals,
-            raw_coordinates,
-            data_idx,
-            backbone_features=rescaled_pca
-            if self.config.general.save_visualizations
-            else None,
-        )
+        if self.config.data.test_mode != "test":
+            self.eval_instance_step(
+                output,
+                target,
+                target_full,
+                inverse_maps,
+                file_names,
+                original_coordinates,
+                original_colors,
+                original_normals,
+                raw_coordinates,
+                data_idx,
+                backbone_features=rescaled_pca
+                if self.config.general.save_visualizations
+                else None,
+            )
+        else:
+            self.save_inference_step(
+                output,
+                target,
+                target_full,
+                inverse_maps,
+                file_names,
+                original_coordinates,
+                original_colors,
+                original_normals,
+                raw_coordinates,
+                data_idx,
+                backbone_features=rescaled_pca
+                if self.config.general.save_visualizations
+                else None,
+            )
 
         if self.config.data.test_mode != "test":
             return {
@@ -736,7 +755,9 @@ class InstanceSegmentation(pl.LightningModule):
         first_full_res=False,
         backbone_features=None,
     ):
-        # print("target_low_res: ", target_low_res)
+        print("len(target_low_res): ", len(target_low_res))
+        print("len(target_full_res): ", len(target_full_res))
+        
         label_offset = self.validation_dataset.label_offset
         if "aux_outputs" in output:
             prediction = output["aux_outputs"]
@@ -1211,6 +1232,382 @@ class InstanceSegmentation(pl.LightningModule):
                         self.decoder_id,
                     )
 
+    def save_inference_step(
+        self,
+        output,
+        target_low_res,
+        target_full_res,
+        inverse_maps,
+        file_names,
+        full_res_coords,
+        original_colors,
+        original_normals,
+        raw_coords,
+        idx,
+        first_full_res=False,
+        backbone_features=None,
+    ):
+        # print("target_low_res: ", target_low_res)
+        label_offset = self.validation_dataset.label_offset
+        if "aux_outputs" in output:
+            prediction = output["aux_outputs"]
+        else:
+            prediction = list()
+        if self.eval_articulation:
+            prediction.append(
+                {
+                    "pred_logits": output["pred_logits"],
+                    "pred_masks": output["pred_masks"],
+                    "pred_origins": output["pred_origins"],
+                    "pred_axises": output["pred_axises"],
+                }
+            )
+        else:
+            prediction.append(
+                {
+                    "pred_logits": output["pred_logits"],
+                    "pred_masks": output["pred_masks"],
+                }
+            )
+        if self.eval_hierarchy_inter:
+            pred_interaction_masks = output["pred_interaction_dict"]["interaction_mask_out"]
+            pred_interaction_masks = [pred_interaction_masks[i] for i in range(len(pred_interaction_masks))]
+            pred_interaction_vectors = output["pred_interaction_dict"]["interaction_mask_vector"]
+            interaction_mask_vector = [pred_interaction_vectors[i] for i in range(len(pred_interaction_vectors))]
+            pred_interaction_outs = output["pred_interaction_dict"]["interaction_outs"]
+            pred_interaction_outs = [pred_interaction_outs[i] for i in range(len(pred_interaction_outs))]
+            
+            prediction[-1]["pred_interaction_masks"] = pred_interaction_masks
+            prediction[-1]["pred_interaction_vectors"] = interaction_mask_vector
+            prediction[-1]["pred_interaction_outs"] = pred_interaction_outs
+        prediction[self.decoder_id][
+            "pred_logits"
+        ] = torch.functional.F.softmax(
+            prediction[self.decoder_id]["pred_logits"], dim=-1
+        )[
+            ..., :-1
+        ]
+        all_pred_classes = list()
+        all_pred_masks = list()
+        all_pred_scores = list()
+        all_heatmaps = list()
+        all_query_pos = list()
+        all_pred_origins = list()
+        all_pred_axises = list()
+        all_pred_interaction_masks = list()
+        all_pred_interaction_masks_vectors = list()
+        all_pred_interaction_outs = list()
+        offset_coords_idx = 0
+        for bid in range(len(prediction[self.decoder_id]["pred_masks"])):
+            if not first_full_res:
+                if self.model.train_on_segments:
+                    masks = (
+                        prediction[self.decoder_id]["pred_masks"][bid]
+                        .detach()
+                        .cpu()[target_low_res[bid]["point2segment"].cpu()]
+                    )
+                else:
+                    masks = (
+                        prediction[self.decoder_id]["pred_masks"][bid]
+                        .detach()
+                        .cpu()
+                    )
+
+                if self.config.general.use_dbscan:
+                    new_preds = {
+                        "pred_masks": list(),
+                        "pred_logits": list(),
+                    }
+
+                    curr_coords_idx = masks.shape[0]
+                    curr_coords = raw_coords[
+                        offset_coords_idx : curr_coords_idx + offset_coords_idx
+                    ]
+                    offset_coords_idx += curr_coords_idx
+
+                    for curr_query in range(masks.shape[1]):
+                        curr_masks = masks[:, curr_query] > 0
+
+                        if curr_coords[curr_masks].shape[0] > 0:
+                            clusters = (
+                                DBSCAN(
+                                    eps=self.config.general.dbscan_eps,
+                                    min_samples=self.config.general.dbscan_min_points,
+                                    n_jobs=-1,
+                                )
+                                .fit(curr_coords[curr_masks])
+                                .labels_
+                            )
+
+                            new_mask = torch.zeros(curr_masks.shape, dtype=int)
+                            new_mask[curr_masks] = (
+                                torch.from_numpy(clusters) + 1
+                            )
+
+                            for cluster_id in np.unique(clusters):
+                                original_pred_masks = masks[:, curr_query]
+                                if cluster_id != -1:
+                                    new_preds["pred_masks"].append(
+                                        original_pred_masks
+                                        * (new_mask == cluster_id + 1)
+                                    )
+                                    new_preds["pred_logits"].append(
+                                        prediction[self.decoder_id][
+                                            "pred_logits"
+                                        ][bid, curr_query]
+                                    )
+                    
+                    scores, masks, classes, heatmap = self.get_mask_and_scores(
+                        torch.stack(new_preds["pred_logits"]).cpu(),
+                        torch.stack(new_preds["pred_masks"]).T,
+                        len(new_preds["pred_logits"]),
+                        self.model.num_classes - 1,
+                    )
+                    
+                else:
+                    if self.eval_articulation:
+                        scores, masks, classes, heatmap, origins, axises, topk_indices = self.get_mask_and_scores(
+                            prediction[self.decoder_id]["pred_logits"][bid].detach().cpu(),
+                            masks,
+                            prediction[self.decoder_id]["pred_logits"][bid].shape[
+                                0
+                            ],
+                            self.model.num_classes - 1,
+                            device="cpu",
+                            origins=prediction[self.decoder_id]["pred_origins"][bid].cpu(),
+                            axises=prediction[self.decoder_id]["pred_axises"][bid].cpu(),
+                        )
+                    else:
+                        scores, masks, classes, heatmap, topk_indices = self.get_mask_and_scores(
+                            prediction[self.decoder_id]["pred_logits"][bid]
+                            .detach()
+                            .cpu(),
+                            masks,
+                            prediction[self.decoder_id]["pred_logits"][bid].shape[
+                                0
+                            ],
+                            self.model.num_classes - 1,
+                        )
+                masks = self.get_full_res_mask(
+                    masks,
+                    inverse_maps[bid],
+                    target_full_res[bid]["point2segment"],
+                )
+
+                heatmap = self.get_full_res_mask(
+                    heatmap,
+                    inverse_maps[bid],
+                    target_full_res[bid]["point2segment"],
+                    is_heatmap=True,
+                )
+                if self.eval_hierarchy_inter:
+                    pred_interaction_mask = prediction[self.decoder_id]['pred_interaction_masks'][bid]
+                    pred_interaction_mask = pred_interaction_mask[:, topk_indices]
+                    pred_interaction_mask_full_res = self.get_full_res_mask(
+                        pred_interaction_mask,
+                        inverse_maps[bid],
+                        target_full_res[bid]["point2segment"],
+                    )
+                    pred_interaction_vector = prediction[self.decoder_id]['pred_interaction_vectors'][bid]
+                    pred_interaction_vector_full_res = self.get_full_res_mask(
+                        pred_interaction_vector,
+                        inverse_maps[bid],
+                        target_full_res[bid]["point2segment"],
+                    )
+                    pred_interaction_out = prediction[self.decoder_id]['pred_interaction_outs'][bid]
+                    pred_interaction_out = pred_interaction_out[:, topk_indices]
+                    pred_interaction_out_full_res = self.get_full_res_mask(
+                        pred_interaction_out,
+                        inverse_maps[bid],
+                        target_full_res[bid]["point2segment"],
+                    )
+                    
+                    pred_interaction_mask_full_res = pred_interaction_mask_full_res.numpy()
+                    pred_interaction_vector_full_res = pred_interaction_vector_full_res.numpy()
+                    pred_interaction_out_full_res = pred_interaction_out_full_res.numpy()
+
+                if backbone_features is not None:
+                    backbone_features = self.get_full_res_mask(
+                        torch.from_numpy(backbone_features),
+                        inverse_maps[bid],
+                        target_full_res[bid]["point2segment"],
+                        is_heatmap=True,
+                    )
+                    backbone_features = backbone_features.numpy()
+            else:
+                assert False, "not tested"
+                masks = self.get_full_res_mask(
+                    prediction[self.decoder_id]["pred_masks"][bid].cpu(),
+                    inverse_maps[bid],
+                    target_full_res[bid]["point2segment"],
+                )
+
+                scores, masks, classes, heatmap = self.get_mask_and_scores(
+                    prediction[self.decoder_id]["pred_logits"][bid].cpu(),
+                    masks,
+                    prediction[self.decoder_id]["pred_logits"][bid].shape[0],
+                    self.model.num_classes - 1,
+                    device="cpu",
+                )
+
+            masks = masks.numpy()
+            heatmap = heatmap.numpy()
+
+            sort_scores = scores.sort(descending=True)
+            sort_scores_index = sort_scores.indices.cpu().numpy()
+            sort_scores_values = sort_scores.values.cpu().numpy()
+            sort_classes = classes[sort_scores_index]
+            if self.eval_articulation:
+                origins = origins.numpy()
+                axises = axises.numpy()
+                sort_origins = origins[sort_scores_index]
+                sort_axises = axises[sort_scores_index]
+            sorted_masks = masks[:, sort_scores_index]
+            sorted_heatmap = heatmap[:, sort_scores_index]
+            if self.eval_hierarchy_inter:
+                pred_interaction_mask_full_res = pred_interaction_mask_full_res[:, sort_scores_index]
+                pred_interaction_out_full_res = pred_interaction_out_full_res[:, sort_scores_index]
+
+            if self.config.general.filter_out_instances:
+                keep_instances = set()
+                pairwise_overlap = sorted_masks.T @ sorted_masks
+                normalization = pairwise_overlap.max(axis=0)
+                norm_overlaps = pairwise_overlap / normalization
+
+                for instance_id in range(norm_overlaps.shape[0]):
+                    # filter out unlikely masks and nearly empty masks
+                    # if not(sort_scores_values[instance_id] < 0.3 or sorted_masks[:, instance_id].sum() < 500):
+                    if not (
+                        sort_scores_values[instance_id]
+                        < self.config.general.scores_threshold
+                    ):
+                        # check if mask != empty
+                        if not sorted_masks[:, instance_id].sum() == 0.0:
+                            overlap_ids = set(
+                                np.nonzero(
+                                    norm_overlaps[instance_id, :]
+                                    > self.config.general.iou_threshold
+                                )[0]
+                            )
+
+                            if len(overlap_ids) == 0:
+                                keep_instances.add(instance_id)
+                            else:
+                                if instance_id == min(overlap_ids):
+                                    keep_instances.add(instance_id)
+
+                keep_instances = sorted(list(keep_instances))
+                all_pred_classes.append(sort_classes[keep_instances])
+                all_pred_masks.append(sorted_masks[:, keep_instances])
+                all_pred_scores.append(sort_scores_values[keep_instances])
+                all_heatmaps.append(sorted_heatmap[:, keep_instances])
+                if self.eval_articulation:
+                    all_pred_origins.append(sort_origins[keep_instances])
+                    all_pred_axises.append(sort_axises[keep_instances])
+            else:
+                all_pred_classes.append(sort_classes)
+                all_pred_masks.append(sorted_masks)
+                all_pred_scores.append(sort_scores_values)
+                all_heatmaps.append(sorted_heatmap)
+                if self.eval_articulation:
+                    all_pred_origins.append(sort_origins)
+                    all_pred_axises.append(sort_axises)
+                if self.eval_hierarchy_inter:
+                    all_pred_interaction_masks.append(pred_interaction_mask_full_res)
+                    all_pred_interaction_masks_vectors.append(pred_interaction_vector_full_res)
+                    all_pred_interaction_outs.append(pred_interaction_out_full_res)
+
+        if self.validation_dataset.dataset_name == "scannet200":
+            all_pred_classes[bid][all_pred_classes[bid] == 0] = -1
+            if self.config.data.test_mode != "test":
+                target_full_res[bid]["labels"][
+                    target_full_res[bid]["labels"] == 0
+                ] = -1
+
+        for bid in range(len(prediction[self.decoder_id]["pred_masks"])):
+            all_pred_classes[
+                bid
+            ] = self.validation_dataset._remap_model_output(
+                all_pred_classes[bid].cpu() + label_offset
+            )
+            # if (
+            #     self.config.data.test_mode != "test"
+            #     and len(target_full_res) != 0
+            # ):
+            if (
+                len(target_full_res) != 0
+            ):
+                # target_full_res[bid][
+                #     "labels"
+                # ] = self.validation_dataset._remap_model_output(
+                #     target_full_res[bid]["labels"].cpu() + label_offset
+                # )
+
+                # PREDICTION BOX
+                bbox_data = []
+                for query_id in range(
+                    all_pred_masks[bid].shape[1]
+                ):  # self.model.num_queries
+                    obj_coords = full_res_coords[bid][
+                        all_pred_masks[bid][:, query_id].astype(bool), :
+                    ]
+                    if obj_coords.shape[0] > 0:
+                        obj_center = obj_coords.mean(axis=0)
+                        obj_axis_length = obj_coords.max(
+                            axis=0
+                        ) - obj_coords.min(axis=0)
+
+                        bbox = np.concatenate((obj_center, obj_axis_length))
+
+                        bbox_data.append(
+                            (
+                                all_pred_classes[bid][query_id].item(),
+                                bbox,
+                                all_pred_scores[bid][query_id],
+                            )
+                        )
+                self.bbox_preds[file_names[bid]] = bbox_data
+
+
+            if self.config.general.eval_inner_core == -1:
+                self.preds[file_names[bid]] = {
+                    "pred_masks": all_pred_masks[bid],
+                    "pred_scores": all_pred_scores[bid],
+                    "pred_classes": all_pred_classes[bid],
+                }
+                if self.eval_articulation:
+                    self.preds[file_names[bid]]["pred_origins"] = all_pred_origins[bid]
+                    self.preds[file_names[bid]]["pred_axises"] = all_pred_axises[bid]
+                if self.eval_hierarchy_inter:
+                    self.preds[file_names[bid]]["pred_interaction_mask"] = \
+                        all_pred_interaction_masks[bid] # [num_points, 1] or [num_points, num_interactions]
+                    print("all_pred_interaction_masks_vectors[bid]: shape", all_pred_interaction_masks_vectors[bid].shape)
+                    self.preds[file_names[bid]]["pred_interaction_mask_vector"] = \
+                        all_pred_interaction_masks_vectors[bid] #  [num_points]
+                    self.preds[file_names[bid]]["pred_interaction_out"] = \
+                        all_pred_interaction_outs[bid] # [num_points, num_interactions]
+                        
+            else:
+                # prev val_dataset
+                self.preds[file_names[bid]] = {
+                    "pred_masks": all_pred_masks[bid][
+                        self.test_dataset.data[idx[bid]]["cond_inner"]
+                    ],
+                    "pred_scores": all_pred_scores[bid],
+                    "pred_classes": all_pred_classes[bid],
+                }
+                if self.eval_articulation:
+                    self.preds[file_names[bid]]["pred_origins"] = all_pred_origins[bid]
+                    self.preds[file_names[bid]]["pred_axises"] = all_pred_axises[bid]
+
+                if self.eval_hierarchy_inter:
+                    self.preds[file_names[bid]]["pred_interaction_mask"] = \
+                        all_pred_interaction_masks[bid] # [num_points, 1] or [num_points, num_interactions]
+                    print("all_pred_interaction_masks_vectors[bid]: shape", all_pred_interaction_masks_vectors[bid].shape)
+                    self.preds[file_names[bid]]["pred_interaction_mask_vector"] = \
+                        all_pred_interaction_masks_vectors[bid] #  [num_points]
+        
+
     def eval_instance_epoch_end(self, mode):
         dataset_evaled = None
         if mode == 'test':
@@ -1220,164 +1617,196 @@ class InstanceSegmentation(pl.LightningModule):
         else:
             assert False, "mode {} not supported ! ".format(mode)
         
-        log_prefix = f"val"
-        ap_results = {}
+        if mode != 'test':
+            log_prefix = f"val"
+            ap_results = {}
 
-        head_results, tail_results, common_results = [], [], []
+            head_results, tail_results, common_results = [], [], []
 
-        box_ap_50 = eval_det(
-            self.bbox_preds, self.bbox_gt, ovthresh=0.5, use_07_metric=False
-        )
-        box_ap_25 = eval_det(
-            self.bbox_preds, self.bbox_gt, ovthresh=0.25, use_07_metric=False
-        )
-        if len(box_ap_25[-1].keys()) == 0:
-            print("box_ap_25[-1].keys: ", box_ap_25[-1].keys())
-            
-            print("self.bbox_preds.keys(): ", self.bbox_preds.keys())
-            print("self.bbox_gt.keys(): ", self.bbox_gt.keys())
-            print("self.bbox_preds: ", self.bbox_preds)
-            print("self.bbox_gt: ", self.bbox_gt)
-            
-        mean_box_ap_25 = sum([v for k, v in box_ap_25[-1].items()]) / len(
-            box_ap_25[-1].keys()
-        )
-        mean_box_ap_50 = sum([v for k, v in box_ap_50[-1].items()]) / len(
-            box_ap_50[-1].keys()
-        )
-
-        ap_results[f"{log_prefix}_mean_box_ap_25"] = mean_box_ap_25
-        ap_results[f"{log_prefix}_mean_box_ap_50"] = mean_box_ap_50
-
-        for class_id in box_ap_50[-1].keys():
-            class_name = self.train_dataset.label_info[class_id]["name"]
-            ap_results[f"{log_prefix}_{class_name}_val_box_ap_50"] = box_ap_50[
-                -1
-            ][class_id]
-
-        for class_id in box_ap_25[-1].keys():
-            class_name = self.train_dataset.label_info[class_id]["name"]
-            ap_results[f"{log_prefix}_{class_name}_val_box_ap_25"] = box_ap_25[
-                -1
-            ][class_id]
-
-        root_path = f"eval_output"
-        base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}_{self.current_epoch}"
-
-        if dataset_evaled.dataset_name in [
-            "scannet",
-            'scannetpp',
-            "stpls3d",
-            "scannet200",
-            'multiscan',
-            'scenefun3d',
-            'articulate3d'
-        ]:
-            gt_data_path = f"{dataset_evaled.data_dir[0]}/instance_gt/{dataset_evaled.mode}"
-        else:
-            gt_data_path = f"{dataset_evaled.data_dir[0]}/instance_gt/Area_{self.config.general.area}"
-
-        pred_path = f"{base_path}/tmp_output.txt"
-
-        log_prefix = f"val"
-
-        if not os.path.exists(base_path):
-            os.makedirs(base_path)
-
-        # try:
-        if dataset_evaled.dataset_name == "s3dis":
-            new_preds = {}
-            for key in self.preds.keys():
-                new_preds[
-                    key.replace(f"Area_{self.config.general.area}_", "")
-                ] = {
-                    "pred_classes": self.preds[key]["pred_classes"] + 1,
-                    "pred_masks": self.preds[key]["pred_masks"],
-                    "pred_scores": self.preds[key]["pred_scores"],
-                }
-            mprec, mrec = evaluate(
-                new_preds, gt_data_path, pred_path, dataset="s3dis"
+            box_ap_50 = eval_det(
+                self.bbox_preds, self.bbox_gt, ovthresh=0.5, use_07_metric=False
             )
-            ap_results[f"{log_prefix}_mean_precision"] = mprec
-            ap_results[f"{log_prefix}_mean_recall"] = mrec
-        elif dataset_evaled.dataset_name == "stpls3d":
-            new_preds = {}
-            for key in self.preds.keys():
-                new_preds[key.replace(".txt", "")] = {
-                    "pred_classes": self.preds[key]["pred_classes"],
-                    "pred_masks": self.preds[key]["pred_masks"],
-                    "pred_scores": self.preds[key]["pred_scores"],
-                }
+            box_ap_25 = eval_det(
+                self.bbox_preds, self.bbox_gt, ovthresh=0.25, use_07_metric=False
+            )
+            if len(box_ap_25[-1].keys()) == 0:
+                print("box_ap_25[-1].keys: ", box_ap_25[-1].keys())
+                
+                print("self.bbox_preds.keys(): ", self.bbox_preds.keys())
+                print("self.bbox_gt.keys(): ", self.bbox_gt.keys())
+                print("self.bbox_preds: ", self.bbox_preds)
+                print("self.bbox_gt: ", self.bbox_gt)
+                
+            mean_box_ap_25 = sum([v for k, v in box_ap_25[-1].items()]) / len(
+                box_ap_25[-1].keys()
+            )
+            mean_box_ap_50 = sum([v for k, v in box_ap_50[-1].items()]) / len(
+                box_ap_50[-1].keys()
+            )
 
-            evaluate(new_preds, gt_data_path, pred_path, dataset="stpls3d")
-        elif dataset_evaled.dataset_name == "multiscan":
-            M_ap50, MA_ap50, MO_ap50, MAO_ap50, MAO_ST_ap50 = \
-            evaluate(self.preds, gt_data_path, pred_path, dataset="multiscan", 
-                        eval_articulation= self.eval_articulation, 
-                        gt_articulations= self.gt_artis)
-            self.log_dict({
-                'M_ap50': M_ap50,
-                'MA_ap50': MA_ap50,
-                'MO_ap50': MO_ap50,
-                'MAO_ap50': MAO_ap50,
-                'MAO_ST_ap50': MAO_ST_ap50
-            }, on_epoch=True)
-        elif dataset_evaled.dataset_name == "scenefun3d":
-            M_ap50, MA_ap50, MO_ap50, MAO_ap50, MAO_ST_ap50 = \
-            evaluate(self.preds, gt_data_path, pred_path, dataset="scenefun3d", 
-                        eval_articulation= self.eval_articulation, 
-                        gt_articulations= self.gt_artis)
-            self.log_dict({
-                'M_ap50': M_ap50,
-                'MA_ap50': MA_ap50,
-                'MO_ap50': MO_ap50,
-                'MAO_ap50': MAO_ap50,
-                'MAO_ST_ap50': MAO_ST_ap50
-            }, on_epoch=True)
-        elif dataset_evaled.dataset_name == "articulate3d":
-            # print("self.eval_hierarchy_inter: ", self.eval_hierarchy_inter)
-            if self.eval_articulation or self.eval_hierarchy_inter:
-                M_ap50, MA_ap50, MO_ap50, MAO_ap50, MAO_ST_ap50, MI_ap50, I_vector_ap50, I_out_ap50, I_GT_ap50, I_out_GT_ap50 = \
-                    evaluate(self.preds, gt_data_path, pred_path, dataset="articulate3d",
+            ap_results[f"{log_prefix}_mean_box_ap_25"] = mean_box_ap_25
+            ap_results[f"{log_prefix}_mean_box_ap_50"] = mean_box_ap_50
+
+            for class_id in box_ap_50[-1].keys():
+                class_name = self.train_dataset.label_info[class_id]["name"]
+                ap_results[f"{log_prefix}_{class_name}_val_box_ap_50"] = box_ap_50[
+                    -1
+                ][class_id]
+
+            for class_id in box_ap_25[-1].keys():
+                class_name = self.train_dataset.label_info[class_id]["name"]
+                ap_results[f"{log_prefix}_{class_name}_val_box_ap_25"] = box_ap_25[
+                    -1
+                ][class_id]
+
+            root_path = f"eval_output"
+            base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}_{self.current_epoch}"
+
+            if dataset_evaled.dataset_name in [
+                "scannet",
+                'scannetpp',
+                "stpls3d",
+                "scannet200",
+                'multiscan',
+                'scenefun3d',
+                'articulate3d'
+            ]:
+                gt_data_path = f"{dataset_evaled.data_dir[0]}/instance_gt/{dataset_evaled.mode}"
+            else:
+                gt_data_path = f"{dataset_evaled.data_dir[0]}/instance_gt/Area_{self.config.general.area}"
+
+            pred_path = f"{base_path}/tmp_output.txt"
+
+            log_prefix = f"val"
+
+            if not os.path.exists(base_path):
+                os.makedirs(base_path)
+
+            # try:
+            if dataset_evaled.dataset_name == "s3dis":
+                new_preds = {}
+                for key in self.preds.keys():
+                    new_preds[
+                        key.replace(f"Area_{self.config.general.area}_", "")
+                    ] = {
+                        "pred_classes": self.preds[key]["pred_classes"] + 1,
+                        "pred_masks": self.preds[key]["pred_masks"],
+                        "pred_scores": self.preds[key]["pred_scores"],
+                    }
+                mprec, mrec = evaluate(
+                    new_preds, gt_data_path, pred_path, dataset="s3dis"
+                )
+                ap_results[f"{log_prefix}_mean_precision"] = mprec
+                ap_results[f"{log_prefix}_mean_recall"] = mrec
+            elif dataset_evaled.dataset_name == "stpls3d":
+                new_preds = {}
+                for key in self.preds.keys():
+                    new_preds[key.replace(".txt", "")] = {
+                        "pred_classes": self.preds[key]["pred_classes"],
+                        "pred_masks": self.preds[key]["pred_masks"],
+                        "pred_scores": self.preds[key]["pred_scores"],
+                    }
+
+                evaluate(new_preds, gt_data_path, pred_path, dataset="stpls3d")
+            elif dataset_evaled.dataset_name == "multiscan":
+                M_ap50, MA_ap50, MO_ap50, MAO_ap50, MAO_ST_ap50 = \
+                evaluate(self.preds, gt_data_path, pred_path, dataset="multiscan", 
                             eval_articulation= self.eval_articulation, 
-                            gt_articulations= self.gt_artis,
-                            eval_hierarchy_inter= self.eval_hierarchy_inter)
+                            gt_articulations= self.gt_artis)
                 self.log_dict({
                     'M_ap50': M_ap50,
                     'MA_ap50': MA_ap50,
                     'MO_ap50': MO_ap50,
                     'MAO_ap50': MAO_ap50,
-                    'MAO_ST_ap50': MAO_ST_ap50,
-                    'MI_ap50': MI_ap50,
-                    'MIVec_ap50': I_vector_ap50,
-                    'MIOut_ap50': I_out_ap50,
-                    "MIGT_ap50": I_GT_ap50,
-                    'MIOutGT_ap50': I_out_GT_ap50
+                    'MAO_ST_ap50': MAO_ST_ap50
                 }, on_epoch=True)
-            else:
-                M_ap50 = evaluate(self.preds, gt_data_path, pred_path, dataset="articulate3d",
+            elif dataset_evaled.dataset_name == "scenefun3d":
+                M_ap50, MA_ap50, MO_ap50, MAO_ap50, MAO_ST_ap50 = \
+                evaluate(self.preds, gt_data_path, pred_path, dataset="scenefun3d", 
                             eval_articulation= self.eval_articulation, 
-                            gt_articulations= self.gt_artis,
-                            eval_hierarchy_inter= self.eval_hierarchy_inter)
+                            gt_articulations= self.gt_artis)
                 self.log_dict({
-                    'M_ap50': M_ap50
+                    'M_ap50': M_ap50,
+                    'MA_ap50': MA_ap50,
+                    'MO_ap50': MO_ap50,
+                    'MAO_ap50': MAO_ap50,
+                    'MAO_ST_ap50': MAO_ST_ap50
                 }, on_epoch=True)
-        else:
-            evaluate(
-                self.preds,
-                gt_data_path,
-                pred_path,
-                dataset=dataset_evaled.dataset_name,
-            )
-        with open(pred_path, "r") as fin:
-            for line_id, line in enumerate(fin):
-                if line_id == 0:
-                    # ignore header
-                    continue
-                class_name, _, ap, ap_50, ap_25 = line.strip().split(",")
+            elif dataset_evaled.dataset_name == "articulate3d":
+                # print("self.eval_hierarchy_inter: ", self.eval_hierarchy_inter)
+                if self.eval_articulation or self.eval_hierarchy_inter:
+                    M_ap50, MA_ap50, MO_ap50, MAO_ap50, MAO_ST_ap50, MI_ap50, I_vector_ap50, I_out_ap50, I_GT_ap50, I_out_GT_ap50 = \
+                        evaluate(self.preds, gt_data_path, pred_path, dataset="articulate3d",
+                                eval_articulation= self.eval_articulation, 
+                                gt_articulations= self.gt_artis,
+                                eval_hierarchy_inter= self.eval_hierarchy_inter)
+                    self.log_dict({
+                        'M_ap50': M_ap50,
+                        'MA_ap50': MA_ap50,
+                        'MO_ap50': MO_ap50,
+                        'MAO_ap50': MAO_ap50,
+                        'MAO_ST_ap50': MAO_ST_ap50,
+                        'MI_ap50': MI_ap50,
+                        'MIVec_ap50': I_vector_ap50,
+                        'MIOut_ap50': I_out_ap50,
+                        "MIGT_ap50": I_GT_ap50,
+                        'MIOutGT_ap50': I_out_GT_ap50
+                    }, on_epoch=True)
+                else:
+                    M_ap50 = evaluate(self.preds, gt_data_path, pred_path, dataset="articulate3d",
+                                eval_articulation= self.eval_articulation, 
+                                gt_articulations= self.gt_artis,
+                                eval_hierarchy_inter= self.eval_hierarchy_inter)
+                    self.log_dict({
+                        'M_ap50': M_ap50
+                    }, on_epoch=True)
+            else:
+                evaluate(
+                    self.preds,
+                    gt_data_path,
+                    pred_path,
+                    dataset=dataset_evaled.dataset_name,
+                )
+            with open(pred_path, "r") as fin:
+                for line_id, line in enumerate(fin):
+                    if line_id == 0:
+                        # ignore header
+                        continue
+                    class_name, _, ap, ap_50, ap_25 = line.strip().split(",")
 
-                if dataset_evaled.dataset_name == "scannet200":
-                    if class_name in VALID_CLASS_IDS_200_VALIDATION:
+                    if dataset_evaled.dataset_name == "scannet200":
+                        if class_name in VALID_CLASS_IDS_200_VALIDATION:
+                            ap_results[
+                                f"{log_prefix}_{class_name}_val_ap"
+                            ] = float(ap)
+                            ap_results[
+                                f"{log_prefix}_{class_name}_val_ap_50"
+                            ] = float(ap_50)
+                            ap_results[
+                                f"{log_prefix}_{class_name}_val_ap_25"
+                            ] = float(ap_25)
+
+                            if class_name in HEAD_CATS_SCANNET_200:
+                                head_results.append(
+                                    np.array(
+                                        (float(ap), float(ap_50), float(ap_25))
+                                    )
+                                )
+                            elif class_name in COMMON_CATS_SCANNET_200:
+                                common_results.append(
+                                    np.array(
+                                        (float(ap), float(ap_50), float(ap_25))
+                                    )
+                                )
+                            elif class_name in TAIL_CATS_SCANNET_200:
+                                tail_results.append(
+                                    np.array(
+                                        (float(ap), float(ap_50), float(ap_25))
+                                    )
+                                )
+                            else:
+                                assert (False, "class not known!")
+                    else:
                         ap_results[
                             f"{log_prefix}_{class_name}_val_ap"
                         ] = float(ap)
@@ -1388,132 +1817,102 @@ class InstanceSegmentation(pl.LightningModule):
                             f"{log_prefix}_{class_name}_val_ap_25"
                         ] = float(ap_25)
 
-                        if class_name in HEAD_CATS_SCANNET_200:
-                            head_results.append(
-                                np.array(
-                                    (float(ap), float(ap_50), float(ap_25))
-                                )
-                            )
-                        elif class_name in COMMON_CATS_SCANNET_200:
-                            common_results.append(
-                                np.array(
-                                    (float(ap), float(ap_50), float(ap_25))
-                                )
-                            )
-                        elif class_name in TAIL_CATS_SCANNET_200:
-                            tail_results.append(
-                                np.array(
-                                    (float(ap), float(ap_50), float(ap_25))
-                                )
-                            )
-                        else:
-                            assert (False, "class not known!")
-                else:
-                    ap_results[
-                        f"{log_prefix}_{class_name}_val_ap"
-                    ] = float(ap)
-                    ap_results[
-                        f"{log_prefix}_{class_name}_val_ap_50"
-                    ] = float(ap_50)
-                    ap_results[
-                        f"{log_prefix}_{class_name}_val_ap_25"
-                    ] = float(ap_25)
+            if dataset_evaled.dataset_name == "scannet200":
+                head_results = np.stack(head_results)
+                common_results = np.stack(common_results)
+                tail_results = np.stack(tail_results)
 
-        if dataset_evaled.dataset_name == "scannet200":
-            head_results = np.stack(head_results)
-            common_results = np.stack(common_results)
-            tail_results = np.stack(tail_results)
+                mean_tail_results = np.nanmean(tail_results, axis=0)
+                mean_common_results = np.nanmean(common_results, axis=0)
+                mean_head_results = np.nanmean(head_results, axis=0)
 
-            mean_tail_results = np.nanmean(tail_results, axis=0)
-            mean_common_results = np.nanmean(common_results, axis=0)
-            mean_head_results = np.nanmean(head_results, axis=0)
+                ap_results[
+                    f"{log_prefix}_mean_tail_ap_25"
+                ] = mean_tail_results[0]
+                ap_results[
+                    f"{log_prefix}_mean_common_ap_25"
+                ] = mean_common_results[0]
+                ap_results[
+                    f"{log_prefix}_mean_head_ap_25"
+                ] = mean_head_results[0]
 
-            ap_results[
-                f"{log_prefix}_mean_tail_ap_25"
-            ] = mean_tail_results[0]
-            ap_results[
-                f"{log_prefix}_mean_common_ap_25"
-            ] = mean_common_results[0]
-            ap_results[
-                f"{log_prefix}_mean_head_ap_25"
-            ] = mean_head_results[0]
+                ap_results[
+                    f"{log_prefix}_mean_tail_ap_50"
+                ] = mean_tail_results[1]
+                ap_results[
+                    f"{log_prefix}_mean_common_ap_50"
+                ] = mean_common_results[1]
+                ap_results[
+                    f"{log_prefix}_mean_head_ap_50"
+                ] = mean_head_results[1]
 
-            ap_results[
-                f"{log_prefix}_mean_tail_ap_50"
-            ] = mean_tail_results[1]
-            ap_results[
-                f"{log_prefix}_mean_common_ap_50"
-            ] = mean_common_results[1]
-            ap_results[
-                f"{log_prefix}_mean_head_ap_50"
-            ] = mean_head_results[1]
+                ap_results[
+                    f"{log_prefix}_mean_tail_ap_25"
+                ] = mean_tail_results[2]
+                ap_results[
+                    f"{log_prefix}_mean_common_ap_25"
+                ] = mean_common_results[2]
+                ap_results[
+                    f"{log_prefix}_mean_head_ap_25"
+                ] = mean_head_results[2]
 
-            ap_results[
-                f"{log_prefix}_mean_tail_ap_25"
-            ] = mean_tail_results[2]
-            ap_results[
-                f"{log_prefix}_mean_common_ap_25"
-            ] = mean_common_results[2]
-            ap_results[
-                f"{log_prefix}_mean_head_ap_25"
-            ] = mean_head_results[2]
+                overall_ap_results = np.nanmean(
+                    np.vstack((head_results, common_results, tail_results)),
+                    axis=0,
+                )
 
-            overall_ap_results = np.nanmean(
-                np.vstack((head_results, common_results, tail_results)),
-                axis=0,
-            )
+                ap_results[f"{log_prefix}_mean_ap"] = overall_ap_results[0]
+                ap_results[f"{log_prefix}_mean_ap_50"] = overall_ap_results[1]
+                ap_results[f"{log_prefix}_mean_ap_25"] = overall_ap_results[2]
 
-            ap_results[f"{log_prefix}_mean_ap"] = overall_ap_results[0]
-            ap_results[f"{log_prefix}_mean_ap_50"] = overall_ap_results[1]
-            ap_results[f"{log_prefix}_mean_ap_25"] = overall_ap_results[2]
-
-            ap_results = {
-                key: 0.0 if math.isnan(score) else score
-                for key, score in ap_results.items()
-            }
-        else:
-            mean_ap = np.nanmean(
-                np.array([
-                    item
-                    for key, item in ap_results.items()
-                    if key.endswith("val_ap")
-                ])
-            )
-            mean_ap_50 = np.nanmean(
-                np.array([
-                    item
-                    for key, item in ap_results.items()
-                    if key.endswith("val_ap_50")
-                ])
-            )
-            mean_ap_25 = np.nanmean(
-                np.array([
-                    item
-                    for key, item in ap_results.items()
-                    if key.endswith("val_ap_25")
-                ])
-            )
-
-            ap_results[f"{log_prefix}_mean_ap"] = mean_ap
-            ap_results[f"{log_prefix}_mean_ap_50"] = mean_ap_50
-            ap_results[f"{log_prefix}_mean_ap_25"] = mean_ap_25
-
-            ap_results = {
-                key: 0.0 if math.isnan(score) else score
-                for key, score in ap_results.items()
+                ap_results = {
+                    key: 0.0 if math.isnan(score) else score
+                    for key, score in ap_results.items()
                 }
-        # except (IndexError, OSError) as e:
-        #     print("NO SCORES!!!")
-        #     ap_results[f"{log_prefix}_mean_ap"] = 0.0
-        #     ap_results[f"{log_prefix}_mean_ap_50"] = 0.0
-        #     ap_results[f"{log_prefix}_mean_ap_25"] = 0.0
+            else:
+                mean_ap = np.nanmean(
+                    np.array([
+                        item
+                        for key, item in ap_results.items()
+                        if key.endswith("val_ap")
+                    ])
+                )
+                mean_ap_50 = np.nanmean(
+                    np.array([
+                        item
+                        for key, item in ap_results.items()
+                        if key.endswith("val_ap_50")
+                    ])
+                )
+                mean_ap_25 = np.nanmean(
+                    np.array([
+                        item
+                        for key, item in ap_results.items()
+                        if key.endswith("val_ap_25")
+                    ])
+                )
 
-        self.log_dict(ap_results, on_epoch=True)
+                ap_results[f"{log_prefix}_mean_ap"] = mean_ap
+                ap_results[f"{log_prefix}_mean_ap_50"] = mean_ap_50
+                ap_results[f"{log_prefix}_mean_ap_25"] = mean_ap_25
 
-        if not self.config.general.export:
-            shutil.rmtree(base_path)
-            
+                ap_results = {
+                    key: 0.0 if math.isnan(score) else score
+                    for key, score in ap_results.items()
+                    }
+            # except (IndexError, OSError) as e:
+            #     print("NO SCORES!!!")
+            #     ap_results[f"{log_prefix}_mean_ap"] = 0.0
+            #     ap_results[f"{log_prefix}_mean_ap_50"] = 0.0
+            #     ap_results[f"{log_prefix}_mean_ap_25"] = 0.0
+
+            self.log_dict(ap_results, on_epoch=True)
+
+            if not self.config.general.export:
+                shutil.rmtree(base_path)
+                
         if self.debug:
+            # save predictions
             import pickle
             save_dir = os.path.join( self.config.general.save_dir, "debug", 
                                     "val_preds")
@@ -1521,8 +1920,10 @@ class InstanceSegmentation(pl.LightningModule):
                 os.makedirs(save_dir)
 
             pred_file = os.path.join(save_dir, "preds.pkl")
+            print("saving predictions to {} ...".format(pred_file))
             with open(pred_file, "wb") as f:
                 pickle.dump(self.preds, f)
+            print("len(self.preds): ", len(self.preds))
 
         del self.preds
         del self.bbox_preds

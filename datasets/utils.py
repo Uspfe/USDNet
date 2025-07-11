@@ -351,15 +351,19 @@ def voxelize(
                     return_index=True,
                     return_inverse=True,
                 )
-                print("Before: ", np.unique(input_dict["labels"][i][:, -1]))
+                # print("Before: ", np.unique(input_dict["labels"][i][:, -1]))
                 input_dict["labels"][i][:, -1] = torch.from_numpy(ret_inv)
-                print("After: ", np.unique(input_dict["labels"][i][:, -1]))
+                # print("After: ", np.unique(input_dict["labels"][i][:, -1]))
                 input_dict["segment2label"].append(
                     input_dict["labels"][i][ret_index][:, :-1]
                 )
 
     if "labels" in input_dict:
         list_labels = input_dict["labels"]
+        
+        # for sample in batch:
+            # print("sequence: ", sample[3])
+        # print("input_dict['labels'][0].shape: ", input_dict['labels'][0].shape)
 
         target = []
         target_full = []
@@ -378,20 +382,20 @@ def voxelize(
                     }
                 )
         else:
-            # if mode == "test":
-            #     for i in range(len(input_dict["labels"])):
-            #         target.append(
-            #             {"point2segment": input_dict["labels"][i][:, 0]}
-            #         )
-            #         target_full.append(
-            #             {
-            #                 "point2segment": torch.from_numpy(
-            #                     original_labels[i][:, 0]
-            #                 ).long()
-            #             }
-            #         )
-            if False:
-                pass
+            if mode == "test":
+                for i in range(len(input_dict["labels"])):
+                    target.append(
+                        {"point2segment": input_dict["labels"][i][:, 0]}
+                    )
+                    target_full.append(
+                        {
+                            "point2segment": torch.from_numpy(
+                                original_labels[i][:, 0]
+                            ).long()
+                        }
+                    )
+            # if False:
+            #     pass
             else:
                 target = get_instance_masks(
                     list_labels,
@@ -455,8 +459,9 @@ def remap_labels_from_zero(labels):
     # remap the random instance ids to start from 0 continously
     unique_arr, ret_index, ret_inv = np.unique(
         labels, return_index=True, return_inverse=True,)
-    instance_id_map = {orig_id: remapped_id for remapped_id, orig_id in enumerate(_)}
-    return ret_inv, instance_id_map
+    # instance_id_map = {orig_id: remapped_id for remapped_id, orig_id in enumerate(_)}
+    # return ret_inv, instance_id_map
+    return ret_inv, None
 
 def voxelize_articulation(
     batch,
@@ -494,6 +499,9 @@ def voxelize_articulation(
     interaction_labels = []
     interaction_centers = []
     full_res_coords = []
+    
+    has_articulation_gt = len(batch[0]) > 8
+        
     for sample in batch:
         idx.append(sample[7])
         original_coordinates.append(sample[6])
@@ -502,13 +510,23 @@ def voxelize_articulation(
         original_colors.append(sample[4])
         original_normals.append(sample[5])
         # articulation origins and axises to torch tensor
-        arti_anno_torch = {}
-        for key in sample[8]:
-            arti_anno_torch[key] = {
-                "origin": torch.from_numpy(sample[8][key]["origin"]).float(),
-                "axis": torch.from_numpy(sample[8][key]["axis"]).float(),
-            }
-        articulations.append(arti_anno_torch)
+        
+        if has_articulation_gt:
+            arti_anno_torch = {}
+            for key in sample[8]:
+                arti_anno_torch[key] = {
+                    "origin": torch.from_numpy(sample[8][key]["origin"]).float(),
+                    "axis": torch.from_numpy(sample[8][key]["axis"]).float(),
+                }
+            articulations.append(arti_anno_torch)
+            if use_hierarchy:
+                original_interaction_labels.append(torch.from_numpy(sample[9]).long())
+                sample_interactions_labels = sample[9][unique_map]
+                interaction_labels.append(torch.from_numpy(sample_interactions_labels).long())
+                interaction_centers.append(sample[10])
+                mov_parts_centers.append(sample[11])
+            else:
+                mov_parts_centers.append(sample[9])
 
         coords = np.floor(sample[0] / voxel_size)
         voxelization_dict.update(
@@ -531,14 +549,6 @@ def voxelize_articulation(
         if len(sample[2]) > 0:
             sample_labels = sample[2][unique_map]
             labels.append(torch.from_numpy(sample_labels).long())
-        if use_hierarchy:
-            original_interaction_labels.append(torch.from_numpy(sample[9]).long())
-            sample_interactions_labels = sample[9][unique_map]
-            interaction_labels.append(torch.from_numpy(sample_interactions_labels).long())
-            interaction_centers.append(sample[10])
-            mov_parts_centers.append(sample[11])
-        else:
-            mov_parts_centers.append(sample[9])
 
     # Concatenate all lists
     input_dict = {"coords": coordinates, "feats": features}
@@ -548,6 +558,8 @@ def voxelize_articulation(
     else:
         coordinates, features = ME.utils.sparse_collate(**input_dict)
         labels = torch.Tensor([])
+
+    assert "labels" in input_dict
 
     if probing:
         return (
@@ -561,18 +573,18 @@ def voxelize_articulation(
             articulations
         )
 
-    # if mode == "test":
-    #     for i in range(len(input_dict["labels"])):
-    #         # _, ret_index, ret_inv = np.unique(
-    #         #     input_dict["labels"][i][:, 0],
-    #         #     return_index=True,
-    #         #     return_inverse=True,
-    #         # )
-    #         remapped_labels, _ = remap_labels_from_zero(input_dict["labels"][i][:, 0])
-    #         input_dict["labels"][i][:, 0] = torch.from_numpy(remapped_labels)
-    #         # input_dict["segment2label"].append(input_dict["labels"][i][ret_index][:, :-1])
-    if False:
-        pass
+    if mode == "test":
+        for i in range(len(input_dict["labels"])):
+            # _, ret_index, ret_inv = np.unique(
+            #     input_dict["labels"][i][:, 0],
+            #     return_index=True,
+            #     return_inverse=True,
+            # )
+            remapped_labels, _ = remap_labels_from_zero(input_dict["labels"][i][:, 0])
+            input_dict["labels"][i][:, 0] = torch.from_numpy(remapped_labels)
+            # input_dict["segment2label"].append(input_dict["labels"][i][ret_index][:, :-1])
+    # if False:
+    #     pass
     else:
         input_dict["segment2label"] = []
         if "labels" in input_dict:
@@ -607,23 +619,23 @@ def voxelize_articulation(
                     }
                 )
         else:
-            # if mode == "test":
-            #     for i in range(len(input_dict["labels"])):
-            #         target.append(
-            #             {"point2segment": input_dict["labels"][i][:, 0]}
-            #         )
-            #         target_full.append(
-            #             {
-            #                 "point2segment": torch.from_numpy(
-            #                     original_labels[i][:, 0]
-            #                 ).long()
-            #             }
-            #         )
-            if False:
-                pass
+            if mode == "test":
+                for i in range(len(input_dict["labels"])):
+                    target.append(
+                        {"point2segment": input_dict["labels"][i][:, 0]}
+                    )
+                    target_full.append(
+                        {
+                            "point2segment": torch.from_numpy(
+                                original_labels[i][:, 0]
+                            ).long()
+                        }
+                    )
+            # if False:
+            #     pass
             else:
-                interaction_labels = interaction_labels if use_hierarchy else None
-                interaction_centers = interaction_centers if use_hierarchy else None
+                interaction_labels = interaction_labels if use_hierarchy else []
+                interaction_centers = interaction_centers if use_hierarchy else []
                 target = get_instance_masks(
                     list_labels,
                     list_segments=input_dict["segment2label"],
@@ -639,7 +651,7 @@ def voxelize_articulation(
                 for i in range(len(target)):
                     target[i]["point2segment"] = input_dict["labels"][i][:, 2]
                 if "train" not in mode:
-                    original_interaction_labels = original_interaction_labels if use_hierarchy else None
+                    original_interaction_labels = original_interaction_labels if use_hierarchy else []
                     target_full = get_instance_masks(
                         [torch.from_numpy(l) for l in original_labels],
                         task=task,
@@ -660,7 +672,7 @@ def voxelize_articulation(
         target_full = []
         coordinates = []
         features = []
-    # print("target", target)
+
     if "train" not in mode:
         return (
             NoGpu(
@@ -700,10 +712,10 @@ def get_instance_masks(
     ignore_class_threshold=100,
     filter_out_classes=[],
     label_offset=0,
-    articulations=None,
-    interaction_labels=None,
-    interaction_centers=None,
-    mov_parts_centers=None,
+    articulations=[],
+    interaction_labels=[],
+    interaction_centers=[],
+    mov_parts_centers=[],
 ):
     target = []
 
@@ -745,7 +757,7 @@ def get_instance_masks(
 
             label_ids.append(label_id)
             masks.append(list_labels[batch_id][:, 1] == instance_id)
-            if interaction_labels is not None:
+            if len(interaction_labels) != 0:
                 interaction_masks.append(interaction_labels[batch_id]== instance_id)
             selected_instance_ids.append(instance_id)
             if list_segments:
@@ -759,7 +771,7 @@ def get_instance_masks(
                 ] = True
                 segment_masks.append(segment_mask)
                 
-            if articulations is not None:
+            if len(articulations) != 0:
                 arti_origins.append(articulations[batch_id][instance_id.item()]["origin"])
                 arti_axises.append(articulations[batch_id][instance_id.item()]["axis"])
                 arti_dict[instance_id.item() + label_id*1000 + 1] = {
@@ -823,13 +835,13 @@ def get_instance_masks(
                         "masks": masks,}
             if list_segments:
                 batch_anno["segment_mask"] = segment_masks
-            if articulations is not None:
+            if len(articulations) != 0:
                 batch_anno["articulations"] = {
                     "origin": torch.stack(arti_origins),
                     "axis": torch.stack(arti_axises),
                 }
                 batch_anno['articulations_dict'] = arti_dict  
-            if interaction_labels is not None and interaction_centers is not None:
+            if len(interaction_labels) != 0 and len(interaction_centers) != 0:
                 batch_anno["interaction_masks"] = interaction_masks
                 batch_anno["interaction_labels"] = interaction_labels[batch_id]
                 insteraction_centers_batch_list = []
@@ -844,7 +856,7 @@ def get_instance_masks(
                 # print("insteraction_centers_batch_list: ", insteraction_centers_batch_list)
                 insteraction_centers_batch = np.array(insteraction_centers_batch_list)
                 batch_anno["interaction_centers"] = torch.from_numpy(insteraction_centers_batch)
-            if mov_parts_centers is not None:
+            if len(mov_parts_centers) != 0 :
                 mov_parts_centers_batch_list = []
                 for instance_id in selected_instance_ids:
                     instance_id = instance_id.item()
