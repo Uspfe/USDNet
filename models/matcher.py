@@ -115,10 +115,10 @@ class HungarianMatcher(nn.Module):
     def memory_efficient_forward(self, outputs, targets, mask_type):
         """More memory-friendly matching"""
         bs = len(targets)
-        if bs != 1:
-            print("bs: ", bs)
-            print("     outputs[pred_logits]: ", outputs["pred_logits"])
-            print("     targets: ", targets)
+        # if bs != 1:
+        # print("bs: ", bs)
+        # print("     outputs[pred_logits]: ", outputs["pred_logits"])
+        # print("     targets: ", targets)
         indices = []
 
         # Iterate through batch size

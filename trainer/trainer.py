@@ -530,27 +530,27 @@ class InstanceSegmentation(pl.LightningModule):
             print("no targets  - eval")
             return None 
              
-        if self.debug:
-            import pickle
-            save_dir = os.path.join( self.config.general.save_dir, "debug", 
-                                    "val")
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
+        # if self.debug:
+        #     import pickle
+        #     save_dir = os.path.join( self.config.general.save_dir, "debug", 
+        #                             "val")
+        #     if not os.path.exists(save_dir):
+        #         os.makedirs(save_dir)
                 
-            coords = data.coordinates.cpu().numpy()
+        #     coords = data.coordinates.cpu().numpy()
             
-            file_name = file_names[0].split(".")[0]
-            coord_file = os.path.join(save_dir, f"{file_name}_coords.npy")
-            arti_file = os.path.join(save_dir, f"{file_name}_artis.pkl")
-            np.save(coord_file, coords)
-            # save ground truth articulation annotation and coords if it's not in test mode
-            # as in test mode, annotation is not available
-            if self.eval_articulation and (self.config.data.test_mode != "test"):
-                articulation_dict_list = []
-                for target_item in target:
-                    articulation_dict_list.append(target_item["articulations_dict"])
-                with open(arti_file, "wb") as f:
-                    pickle.dump(articulation_dict_list, f)
+        #     file_name = file_names[0].split(".")[0]
+        #     coord_file = os.path.join(save_dir, f"{file_name}_coords.npy")
+        #     arti_file = os.path.join(save_dir, f"{file_name}_artis.pkl")
+        #     np.save(coord_file, coords)
+        #     # save ground truth articulation annotation and coords if it's not in test mode
+        #     # as in test mode, annotation is not available
+        #     if self.eval_articulation and (self.config.data.test_mode != "test"):
+        #         articulation_dict_list = []
+        #         for target_item in target:
+        #             articulation_dict_list.append(target_item["articulations_dict"])
+        #         with open(arti_file, "wb") as f:
+        #             pickle.dump(articulation_dict_list, f)
 
         if len(data.coordinates) == 0:
             return 0.0
@@ -1044,6 +1044,7 @@ class InstanceSegmentation(pl.LightningModule):
             #     self.config.data.test_mode != "test"
             #     and len(target_full_res) != 0
             # ):
+            print("len(target_full_res): ", len(target_full_res))
             if (
                 len(target_full_res) != 0
             ):
@@ -1107,7 +1108,7 @@ class InstanceSegmentation(pl.LightningModule):
                         )
 
                 self.bbox_gt[file_names[bid]] = bbox_data
-
+            # print("file_names[bid]: ", file_names[bid])
             if self.config.general.eval_inner_core == -1:
                 self.preds[file_names[bid]] = {
                     "pred_masks": all_pred_masks[bid],
@@ -1734,6 +1735,7 @@ class InstanceSegmentation(pl.LightningModule):
                 }, on_epoch=True)
             elif dataset_evaled.dataset_name == "articulate3d":
                 # print("self.eval_hierarchy_inter: ", self.eval_hierarchy_inter)
+                print("self.gt_artis.keys(): ", self.gt_artis.keys())
                 if self.eval_articulation or self.eval_hierarchy_inter:
                     M_ap50, MA_ap50, MO_ap50, MAO_ap50, MAO_ST_ap50, MI_ap50, I_vector_ap50, I_out_ap50, I_GT_ap50, I_out_GT_ap50 = \
                         evaluate(self.preds, gt_data_path, pred_path, dataset="articulate3d",

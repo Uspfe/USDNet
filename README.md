@@ -1,51 +1,34 @@
-## Mask3D: Mask Transformer for 3D Instance Segmentation
-<div align="center">
-<a href="https://jonasschult.github.io/">Jonas Schult</a><sup>1</sup>, <a href="https://francisengelmann.github.io/">Francis Engelmann</a><sup>2,3</sup>, <a href="https://www.vision.rwth-aachen.de/person/10/">Alexander Hermans</a><sup>1</sup>, <a href="https://orlitany.github.io/">Or Litany</a><sup>4</sup>, <a href="https://inf.ethz.ch/people/person-detail.MjYyNzgw.TGlzdC8zMDQsLTg3NDc3NjI0MQ==.html">Siyu Tang</a><sup>3</sup>,  <a href="https://www.vision.rwth-aachen.de/person/1/">Bastian Leibe</a><sup>1</sup>
+# USDNet - the Baseline of Articulate3D: Holistic Understanding of 3D Scenes as Universal Scene Description
+This repository contains the official code release for the **Articulate3D** paper, accepted at **ICCV 2025**.
 
-<sup>1</sup>RWTH Aachen University <sup>2</sup>ETH AI Center <sup>3</sup>ETH Zurich <sup>4</sup>NVIDIA
+> 📄 **Paper**: [Articulate3D (ICCV 2025)](https://insait-institute.github.io/articulate3d.github.io/)  
+> 🏁 **Challenge**: Track 3 at [OpenSUN3D Workshop, ICCV 2025](https://opensun3d.github.io/) 
 
-Mask3D predicts accurate 3D semantic instances achieving state-of-the-art on ScanNet, ScanNet200, S3DIS and STPLS3D.
-
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/mask3d-for-3d-semantic-instance-segmentation/3d-instance-segmentation-on-scannetv2)](https://paperswithcode.com/sota/3d-instance-segmentation-on-scannetv2?p=mask3d-for-3d-semantic-instance-segmentation)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/mask3d-for-3d-semantic-instance-segmentation/3d-instance-segmentation-on-scannet200)](https://paperswithcode.com/sota/3d-instance-segmentation-on-scannet200?p=mask3d-for-3d-semantic-instance-segmentation)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/mask3d-for-3d-semantic-instance-segmentation/3d-instance-segmentation-on-s3dis)](https://paperswithcode.com/sota/3d-instance-segmentation-on-s3dis?p=mask3d-for-3d-semantic-instance-segmentation)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/mask3d-for-3d-semantic-instance-segmentation/3d-instance-segmentation-on-stpls3d)](https://paperswithcode.com/sota/3d-instance-segmentation-on-stpls3d?p=mask3d-for-3d-semantic-instance-segmentation)
-
-<a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
-<a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white"></a>
-<a href="https://hydra.cc/"><img alt="Config: Hydra" src="https://img.shields.io/badge/Config-Hydra-89b8cd"></a>
-
-![teaser](./docs/teaser.jpg)
-
-</div>
+---
 <br><br>
 
 [[Project Webpage](https://jonasschult.github.io/Mask3D/)]
 [[Paper](https://arxiv.org/abs/2210.03105)]
 [[Demo](https://francisengelmann.github.io/mask3d/)]
 
+## 📦 What's in this repo?
 
-## News
+Currently released:
+- The implementation of `USDNet`, baseline of the [**Challenge**](https://insait-institute.github.io/articulate3d.github.io/challenge.html).
 
-* **29. October 2023**: Check out this [easy setup](https://github.com/cvg/Mask3D) for Mask3D.
-* **17. January 2023**: Mask3D is accepted at ICRA 2023. :fire:
-* **14. October 2022**: STPLS3D support added.
-* **10. October 2022**: Mask3D ranks 2nd on the [STPLS3D Challenge](https://codalab.lisn.upsaclay.fr/competitions/4646#results) hosted by the [Urban3D Workshop](https://urban3dchallenge.github.io/) at ECCV 2022.
-* **6. October 2022**: [Mask3D preprint](https://arxiv.org/abs/2210.03105) released on arXiv.
-* **25. September 2022**: Code released.
-
-## Code structure
-We adapt the codebase of [Mix3D](https://github.com/kumuji/mix3d) which provides a highly modularized framework for 3D Semantic Segmentation based on the MinkowskiEngine.
+## 1. Code structure
+We adapt the codebase of [Mask3D](https://github.com/JonasSchult/Mask3D) which provides a highly modularized framework for 3D Semantic Instance Segmentation based on the MinkowskiEngine.
 
 ```
-├── mix3d
-│   ├── main_instance_segmentation.py <- the main file
+├── USDNet
+│   ├── main_instance_segmentation_articulation.py <- the main file
 │   ├── conf                          <- hydra configuration files
 │   ├── datasets
 │   │   ├── preprocessing             <- folder with preprocessing scripts
+│   │   │   ├── articulate3d_preprocessing_challenge.py   <- file of preprocessing for the challenge
 │   │   ├── semseg.py                 <- indoor dataset
 │   │   └── utils.py        
-│   ├── models                        <- Mask3D modules
+│   ├── models                        <- USDNet model based on Mask3D
 │   ├── trainer
 │   │   ├── __init__.py
 │   │   └── trainer.py                <- train loop
@@ -57,147 +40,115 @@ We adapt the codebase of [Mix3D](https://github.com/kumuji/mix3d) which provides
 ├── docs
 ├── README.md
 └── saved                             <- folder that stores models and logs
+└──Dockerfile                         <- Dockerfile for env setup for cuda 12
 ```
 
-### Dependencies :memo:
+## 2. Dependencies :memo:
 The main dependencies of the project are the following:
 ```yaml
 python: 3.10.9
 cuda: 11.3
 ```
-You can set up a conda environment as follows
-```
-# Some users experienced issues on Ubuntu with an AMD CPU
-# Install libopenblas-dev (issue #115, thanks WindWing)
-# sudo apt-get install libopenblas-dev
+You can set up a conda environment following instructions in [Mask3D](https://github.com/JonasSchult/Mask3D).
+<!-- We also provide a Docker file (./Dockerfile) for the environment setup for cuda: 12.1. Note that MinkowskiEngine used in Mask3D is not for cuda 12, see [this issue]() -->
 
-export TORCH_CUDA_ARCH_LIST="6.0 6.1 6.2 7.0 7.2 7.5 8.0 8.6"
-
-conda env create -f environment.yml
-
-conda activate mask3d_cuda113
-
-pip3 install torch==1.12.1+cu113 torchvision==0.13.1+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
-pip3 install torch-scatter -f https://data.pyg.org/whl/torch-1.12.1+cu113.html
-pip3 install 'git+https://github.com/facebookresearch/detectron2.git@710e7795d0eeadf9def0e7ef957eea13532e34cf' --no-deps
-
-mkdir third_party
-cd third_party
-
-git clone --recursive "https://github.com/NVIDIA/MinkowskiEngine"
-cd MinkowskiEngine
-git checkout 02fc608bea4c0549b0a7b00ca1bf15dee4a0b228
-python setup.py install --force_cuda --blas=openblas
-
-cd ..
-git clone https://github.com/ScanNet/ScanNet.git
-cd ScanNet/Segmentator
-git checkout 3e5726500896748521a6ceb81271b0f5b2c0e7d2
-make
-
-cd ../../pointnet2
-python setup.py install
-
-cd ../../
-pip3 install pytorch-lightning==1.7.2
-```
-
-### Data preprocessing :hammer:
+## 3. Data preprocessing :hammer:
 After installing the dependencies, we preprocess the datasets.
+First, put the dataset in the dir "./data/raw/articulate3d".
+Then run the [bash file](./scripts/preprocessing_articulate3d.sh) and the preprocessed files will be saved in "./data/processed/".
+For efficiency, the preprocessing code will downsample the pointcloud of the mesh from [Scannet++](https://kaldir.vc.in.tum.de/scannetpp/) with voxel size 0.01 cm. 
+Note that the evaluation in [Articulate3D challenge](https://insait-institute.github.io/articulate3d.github.io/challenge.html) is based on the voxelized point cloud with the ground truth annotations.
 
-#### ScanNet / ScanNet200
-First, we apply Felzenswalb and Huttenlocher's Graph Based Image Segmentation algorithm to the test scenes using the default parameters.
-Please refer to the [original repository](https://github.com/ScanNet/ScanNet/tree/master/Segmentator) for details.
-Put the resulting segmentations in `./data/raw/scannet_test_segments`.
+Note the splits files is in "./datasets/articulate3d" and should be copied to "./data/raw/articulate3d/".
+
+The structure should look like this:
 ```
-python -m datasets.preprocessing.scannet_preprocessing preprocess \
---data_dir="PATH_TO_RAW_SCANNET_DATASET" \
---save_dir="data/processed/scannet" \
---git_repo="PATH_TO_SCANNET_GIT_REPO" \
---scannet200=false/true
+├── USDNet
+│   ├── data
+│   │   ├── raw                       <- raw data
+│   │   │   ├── articulate3d
+│   │   │   │   ├──splits             <- splits of training, validation and test set
+│   │   │   │   │   ├──train.txt
+│   │   │   │   │   ├──val.txt
+│   │   │   │   │   ├──tesst.txt
+│   │   │   │   │──scans
+│   │   │   │   │   ├──0a5c013435
+│   │   │   │   │   │   ├──mesh_aligned_0.05.ply      <- mesh file
+│   │   │   │   │   │   ├──0a5c013435_parts.json      <- annotation for movable and interactable part segmentation
+│   │   │   │   │   │   ├──0a5c013435_artic.json      <- annotation for articulation parameters of movable part
+│   │   │   │   │   ├── ... 
+│   │   ├── processed                 <- folder with processed data by preprocessing_articulate3d.sh 
+│   │   │   ├──articulate3d_challenge_mov             <- processed data for movable part seg and articulation prediction
+│   │   │   │   │──train                              <- dataset with pointcloud, color and normal  + annotation for training set 
+│   │   │   │   │──validation                         <- dataset with pointcloud, color and normal  + annotation for validation set 
+│   │   │   │   │──test                               <- dataset with pointcloud, color and normal  + annotation for test set 
+│   │   │   │   │──train_database.yaml                <- database for train set, used for dataloader to locate file paths
+│   │   │   │   │──validation_database.yaml           <- database for validation set
+│   │   │   │   │──train_validation_database.yaml     <- database for train+validation set
+│   │   │   │   │──test_database.yaml                 <- database for test set
+│   │   │   │   │──expand_dict                        <- neighbored point annotation of movable part, for coarse to fine segmentation training
+│   │   │   │   │──instance_gt                        <- gt segmentation annotation in .txt
+
 ```
 
-#### S3DIS
-The S3DIS dataset contains some smalls bugs which we initially fixed manually. We will soon release a preprocessing script which directly preprocesses the original dataset. For the time being, please follow the instructions [here](https://github.com/JonasSchult/Mask3D/issues/8#issuecomment-1279535948) to fix the dataset manually. Afterwards, call the preprocessing script as follows:
+## 4. Training :train2:
+### Movable part segmentation and articulation prediction
+Step 1
 
-```
-python -m datasets.preprocessing.s3dis_preprocessing preprocess \
---data_dir="PATH_TO_Stanford3dDataset_v1.2" \
---save_dir="data/processed/s3dis"
-```
+Download the [pretrained model](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/scannet200/scannet200_benchmark.ckpt) of Mask3D. 
 
-#### STPLS3D
-```
-python -m datasets.preprocessing.stpls3d_preprocessing preprocess \
---data_dir="PATH_TO_STPLS3D" \
---save_dir="data/processed/stpls3d"
-```
+Step 2
 
-### Training and testing :train2:
-Train Mask3D on the ScanNet dataset:
+Check the notes and TODOs in the "./scripts/train_mov.sh" to set the correct key and path
+
+Step 3
+
+Start training for movable part segmentation and articulation parameter prediction:
 ```bash
-python main_instance_segmentation.py
+bash ./scripts/train_mov.sh
 ```
-Please refer to the [config scripts](https://github.com/JonasSchult/Mask3D/tree/main/scripts) (for example [here](https://github.com/JonasSchult/Mask3D/blob/main/scripts/scannet/scannet_val.sh#L15)) for detailed instructions how to reproduce our results.
+
+### Interactable part segmentation
+Step 1 
+
+Get the trained model from "Movable part segmentation and articulation prediction" and use it for training interactable part segmentation to speed up converging. 
+
+Step 2
+
+Check the notes and TODOs in the "./scripts/inter_mov.sh" to set the correct key and path
+
 In the simplest case the inference command looks as follows:
+
+Step 3
+
+Start training for interactable part segmentation:
 ```bash
-python main_instance_segmentation.py \
-general.checkpoint='PATH_TO_CHECKPOINT.ckpt' \
-general.train_mode=false
+bash ./scripts/train_inter.sh
 ```
 
-## Trained checkpoints :floppy_disk:
-We provide detailed scores and network configurations with trained checkpoints.
+### Trained checkpoints :floppy_disk:
+We provide the trained checkpoints for the 2 tasks [here](https://drive.google.com/drive/folders/1qv2hTF8_U7nM1tAz1hltO1EGggstVaeR?usp=sharing).
 
-### [S3DIS](http://buildingparser.stanford.edu/dataset.html) (pretrained on ScanNet train+val)
-Following PointGroup, HAIS and SoftGroup, we finetune a model pretrained on ScanNet ([config](./scripts/scannet/scannet_pretrain_for_s3dis.sh) and [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/scannet_pretrained/scannet_pretrained.ckpt)).
-| Dataset | AP | AP_50 | AP_25 | Config | Checkpoint :floppy_disk: | Scores :chart_with_upwards_trend: | Visualizations :telescope:
-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Area 1 | 69.3 | 81.9 | 87.7 | [config](scripts/s3dis/s3dis_pretrained.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/scannet_pretrained/area1_scannet_pretrained.ckpt) | [scores](./docs/detailed_scores/s3dis/scannet_pretrained/s3dis_area1_scannet_pretrained.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/scannet_pretrained/area_1/)
-| Area 2 | 44.0 | 59.5 | 66.5 | [config](scripts/s3dis/s3dis_pretrained.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/scannet_pretrained/area2_scannet_pretrained.ckpt) | [scores](./docs/detailed_scores/s3dis/scannet_pretrained/s3dis_area2_scannet_pretrained.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/scannet_pretrained/area_2/)
-| Area 3 | 73.4 | 83.2 | 88.2 | [config](scripts/s3dis/s3dis_pretrained.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/scannet_pretrained/area3_scannet_pretrained.ckpt) | [scores](./docs/detailed_scores/s3dis/scannet_pretrained/s3dis_area3_scannet_pretrained.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/scannet_pretrained/area_3/)
-| Area 4 | 58.0 | 69.5 | 74.9 | [config](scripts/s3dis/s3dis_pretrained.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/scannet_pretrained/area4_scannet_pretrained.ckpt) | [scores](./docs/detailed_scores/s3dis/scannet_pretrained/s3dis_area4_scannet_pretrained.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/scannet_pretrained/area_4/)
-| Area 5 | 57.8 | 71.9 | 77.2 | [config](scripts/s3dis/s3dis_pretrained.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/scannet_pretrained/area5_scannet_pretrained.ckpt) | [scores](./docs/detailed_scores/s3dis/scannet_pretrained/s3dis_area5_scannet_pretrained.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/scannet_pretrained/area_5/)
-| Area 6 | 68.4 | 79.9 | 85.2 | [config](scripts/s3dis/s3dis_pretrained.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/scannet_pretrained/area6_scannet_pretrained.ckpt) | [scores](./docs/detailed_scores/s3dis/scannet_pretrained/s3dis_area6_scannet_pretrained.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/scannet_pretrained/area_6/)
 
-### [S3DIS](http://buildingparser.stanford.edu/dataset.html) (from scratch)
+## 5. Inference :chart_with_upwards_trend:
+Run inference script for evaluation of the trained mode and for the challange submission
 
-| Dataset | AP | AP_50 | AP_25 | Config | Checkpoint :floppy_disk: | Scores :chart_with_upwards_trend: | Visualizations :telescope:
-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Area 1 | 74.1 | 85.1 | 89.6 | [config](scripts/s3dis/s3dis_from_scratch.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/from_scratch/area1_from_scratch.ckpt) | [scores](./docs/detailed_scores/s3dis/from_scratch/s3dis_area1_from_scratch.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/from_scratch/area_1/)
-| Area 2 | 44.9 | 57.1 | 67.9 | [config](scripts/s3dis/s3dis_from_scratch.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/from_scratch/area2_from_scratch.ckpt) | [scores](./docs/detailed_scores/s3dis/from_scratch/s3dis_area2_from_scratch.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/from_scratch/area_2/)
-| Area 3 | 74.4 | 84.4 | 88.1 | [config](scripts/s3dis/s3dis_from_scratch.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/from_scratch/area3_from_scratch.ckpt) | [scores](./docs/detailed_scores/s3dis/from_scratch/s3dis_area3_from_scratch.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/from_scratch/area_3/)
-| Area 4 | 63.8 | 74.7 | 81.1 | [config](scripts/s3dis/s3dis_from_scratch.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/from_scratch/area4_from_scratch.ckpt) | [scores](./docs/detailed_scores/s3dis/from_scratch/s3dis_area4_from_scratch.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/from_scratch/area_4/)
-| Area 5 | 56.6 | 68.4 | 75.2 | [config](scripts/s3dis/s3dis_from_scratch.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/from_scratch/area5_from_scratch.ckpt) | [scores](./docs/detailed_scores/s3dis/from_scratch/s3dis_area5_from_scratch.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/from_scratch/area_5/)
-| Area 6 | 73.3 | 83.4 | 87.8 | [config](scripts/s3dis/s3dis_from_scratch.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/s3dis/from_scratch/area6_from_scratch.ckpt) | [scores](./docs/detailed_scores/s3dis/from_scratch/s3dis_area6_from_scratch.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/s3dis/from_scratch/area_6/)
+### Movable part segmentation and articulation prediction
+```bash
+bash ./scripts/infer_mov.sh
+```
 
-### [ScanNet v2](https://kaldir.vc.in.tum.de/scannet_benchmark/semantic_instance_3d?metric=ap)
-
-| Dataset | AP | AP_50 | AP_25 | Config | Checkpoint :floppy_disk: | Scores :chart_with_upwards_trend: | Visualizations :telescope:
-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| ScanNet val  | 55.2 | 73.7 | 83.5 | [config](scripts/scannet/scannet_val.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/scannet/scannet_val.ckpt) | [scores](./docs/detailed_scores/scannet_val.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/scannet/val/)
-| ScanNet test | 56.6 | 78.0 | 87.0 | [config](scripts/scannet/scannet_benchmark.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/scannet/scannet_benchmark.ckpt) | [scores](http://kaldir.vc.in.tum.de/scannet_benchmark/result_details?id=1081) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/scannet/test/)
-
-### [ScanNet 200](https://kaldir.vc.in.tum.de/scannet_benchmark/scannet200_semantic_instance_3d)
-
-| Dataset | AP | AP_50 | AP_25 | Config | Checkpoint :floppy_disk: | Scores :chart_with_upwards_trend: | Visualizations :telescope:
-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| ScanNet200 val | 27.4 | 37.0 | 42.3 | [config](scripts/scannet200/scannet200_val.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/scannet200/scannet200_val.ckpt) | [scores](./docs/detailed_scores/scannet200_val.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/scannet200/val/)
-| ScanNet200 test | 27.8 | 38.8 | 44.5 | [config](scripts/scannet200/scannet200_benchmark.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/scannet200/scannet200_benchmark.ckpt) | [scores](https://kaldir.vc.in.tum.de/scannet_benchmark/result_details?id=1242) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/scannet200/test/)
-
-### [STPLS3D](https://www.stpls3d.com/)
-
-| Dataset | AP | AP_50 | AP_25 | Config | Checkpoint :floppy_disk: | Scores :chart_with_upwards_trend: | Visualizations :telescope:
-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| STPLS3D val | 57.3 | 74.3 | 81.6 | [config](scripts/stpls3d/stpls3d_val.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/stpls3d/stpls3d_val.ckpt) | [scores](./docs/detailed_scores/stpls3d.txt) | [visualizations](https://omnomnom.vision.rwth-aachen.de/data/mask3d/visualizations/stpls3d/)
-| STPLS3D test | 63.4 | 79.2 | 85.6 | [config](scripts/stpls3d/stpls3d_benchmark.sh) | [checkpoint](https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/stpls3d/stpls3d_benchmark.zip) | [scores](https://codalab.lisn.upsaclay.fr/competitions/4646#results) | visualizations
+### Interactable part segmentation
+```bash
+bash ./scripts/infer_inter.sh
+```
 
 ## BibTeX :pray:
 ```
-@article{Schult23ICRA,
-  title     = {{Mask3D: Mask Transformer for 3D Semantic Instance Segmentation}},
-  author    = {Schult, Jonas and Engelmann, Francis and Hermans, Alexander and Litany, Or and Tang, Siyu and Leibe, Bastian},
-  booktitle = {{International Conference on Robotics and Automation (ICRA)}},
-  year      = {2023}
+@article{halacheva2024articulate3d,
+  title={Holistic Understanding of 3D Scenes as Universal Scene Description},
+  author={Anna-Maria Halacheva* and Yang Miao* and Jan-Nico Zaech and Xi Wang and Luc Van Gool and Danda Pani Paudel},
+  year={2024},
+  journal={arXiv preprint arXiv:2412.01398},
 }
 ```
