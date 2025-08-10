@@ -143,6 +143,15 @@ bash ./scripts/infer_mov.sh
 bash ./scripts/infer_inter.sh
 ```
 
+## 6. TODO List
+- [x] Release Code
+- [x] Set up Challenge Server
+- [x] Training Code and instructions
+- [x] Checkpoints (mov yes, inter no)
+- [ ] Merge data loader with json format to datapreprocessing
+- [ ] provide preprocessed data for user's convenience
+
+
 ## BibTeX :pray:
 ```
 @article{halacheva2024articulate3d,
