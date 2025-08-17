@@ -53,7 +53,9 @@ You can set up a conda environment following instructions in [Mask3D](https://gi
 <!-- We also provide a Docker file (./Dockerfile) for the environment setup for cuda: 12.1. Note that MinkowskiEngine used in Mask3D is not for cuda 12, see [this issue]() -->
 
 ## 3. Data preprocessing :hammer:
-After installing the dependencies, we preprocess the datasets.
+After installing the dependencies, we preprocess the datasets. 
+Note we also provide the preprocessed data [here](https://drive.google.com/drive/folders/1HYPkUnF5QIdV2gH9vwgWW4lAvCSg51jK?usp=drive_link) for the convenience. You can download it and put it in the ./data/processed and skip the following preprocessing steps.
+
 First, put the dataset in the dir "./data/raw/articulate3d".
 Then run the [bash file](./scripts/preprocessing_articulate3d.sh) and the preprocessed files will be saved in "./data/processed/".
 For efficiency, the preprocessing code will downsample the pointcloud of the mesh from [Scannet++](https://kaldir.vc.in.tum.de/scannetpp/) with voxel size 0.01 cm. 
@@ -148,8 +150,8 @@ bash ./scripts/infer_inter.sh
 - [x] Set up Challenge Server
 - [x] Training Code and instructions
 - [x] Checkpoints (mov yes, inter no)
+- [x] provide preprocessed data for user's convenience
 - [ ] Merge data loader with json format to datapreprocessing
-- [ ] provide preprocessed data for user's convenience
 
 
 ## BibTeX :pray:
