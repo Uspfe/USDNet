@@ -1,0 +1,13 @@
+# keep build context light
+data/
+results/
+saved/
+
+*.log
+__pycache__/
+*.pyc
+.env
+.venv/
+.git/
+.gitignore
+.dockerignore

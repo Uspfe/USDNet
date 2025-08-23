@@ -2,10 +2,12 @@
 /logs
 /data
 /eval_output
+/results
+/saved
 third_party/MinkowskiEngine
 third_party/ScanNet
 *.out
-
+checkpoints/
 .vscode/
 
 

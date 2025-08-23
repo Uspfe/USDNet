@@ -50,7 +50,11 @@ python: 3.10.9
 cuda: 11.3
 ```
 You can set up a conda environment following instructions in [Mask3D](https://github.com/JonasSchult/Mask3D).
-<!-- We also provide a Docker file (./Dockerfile) for the environment setup for cuda: 12.1. Note that MinkowskiEngine used in Mask3D is not for cuda 12, see [this issue]() -->
+
+We also provide a Docker file (./Dockerfile) for the environment setup for cuda: 12.1:
+```
+docker build -t usdnet:latest .
+```
 
 ## 3. Data preprocessing :hammer:
 After installing the dependencies, we preprocess the datasets. 
@@ -151,6 +155,7 @@ bash ./scripts/infer_inter.sh
 - [x] Training Code and instructions
 - [x] Checkpoints (mov yes, inter no)
 - [x] provide preprocessed data for user's convenience
+- [x] Add docker file for env setup in cuda 12
 - [ ] Merge data loader with json format to datapreprocessing
 
 
