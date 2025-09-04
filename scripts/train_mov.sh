@@ -20,7 +20,7 @@ CURR_QUERY=100
 
 # TRAIN
 BACKBONE_CKPT=./checkpoints/scannet_benchmark.ckpt # TODO: set the path of Mask3D pre-trained model
-TRAIN_MODE="train" # "train" means training with train set for dev mode and "train_validation" means training with train+validation sets for submission in test set
+TRAIN_MODE="train" # TODO - check this: "train" means training with train set for dev mode and "train_validation" means training with train+validation sets for submission in test set
 SAVE_DIR=./results/train_mov_articulation 
 
 python main_instance_segmentation_articulation.py \
