@@ -62,6 +62,7 @@ python transfer_preds_files.py \
 --preds_dir $SAVE_DIR/inter_test 
 
 # zip the preds_dir
-zip -r $SAVE_DIR/inter_test.zip $SAVE_DIR/inter_test
+cd $SAVE_DIR # try to make sure no parent dir in the zip dir
+zip -r inter_test.zip inter_test
 
 # submit the prediction to the challenge server phase of Interactable Prediction Test
