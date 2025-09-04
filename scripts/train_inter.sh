@@ -20,7 +20,7 @@ CURR_TOPK=150
 CURR_QUERY=100
 
 # TRAIN
-BACKBONE_CKPT= # TODO: set the path of Mask3D pre-trained model
+BACKBONE_CKPT= # TODO: set the path of the pre-trained mov part seg model
 TRAIN_MODE="train" # "train" means training with train set for dev mode and "train_validation" means training with train+validation sets for submission in test set
 SAVE_DIR=./results/train_inter_seg 
 
