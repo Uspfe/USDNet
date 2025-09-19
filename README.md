@@ -7,10 +7,6 @@ This repository contains the official code release for the **Articulate3D** pape
 ---
 <br><br>
 
-[[Project Webpage](https://jonasschult.github.io/Mask3D/)]
-[[Paper](https://arxiv.org/abs/2210.03105)]
-[[Demo](https://francisengelmann.github.io/mask3d/)]
-
 ## 📦 What's in this repo?
 
 Currently released:
