@@ -64,7 +64,7 @@ class GenericMLP(nn.Module):
         if norm_fn_name is not None:
             norm = NORM_DICT[norm_fn_name]
         if norm_fn_name == "ln" and use_conv:
-            norm = lambda x: nn.GroupNorm(1, x)  # easier way to use LayerNorm
+            norm = lambda x: nn.GroupNorm(1, x)
 
         if dropout is not None:
             if not isinstance(dropout, list):
@@ -104,7 +104,7 @@ class GenericMLP(nn.Module):
     def do_weight_init(self, weight_init_name):
         func = WEIGHT_INIT_DICT[weight_init_name]
         for (_, param) in self.named_parameters():
-            if param.dim() > 1:  # skips batchnorm/layernorm
+            if param.dim() > 1:
                 func(param)
 
     def forward(self, x):

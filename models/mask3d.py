@@ -17,6 +17,14 @@ from MinkowskiEngine import MinkowskiReLU
 from models.resnet import ResNetBase, get_norm
 from models.modules.common import ConvType, NormType, conv, conv_tr
 
+# PEFT imports for LoRA fine-tuning
+try:
+    from peft import LoraConfig, get_peft_model, TaskType
+    PEFT_AVAILABLE = True
+except ImportError:
+    print("PEFT not available. Install with: pip install peft")
+    PEFT_AVAILABLE = False
+
 class Mask3D(nn.Module):
     def __init__(
         self,
@@ -57,6 +65,11 @@ class Mask3D(nn.Module):
         pred_mov_centers = False,
         pointwise_origin = True,
         pointwise_axis = True,
+        use_lora = False,
+        lora_r = 8,
+        lora_alpha = 16,
+        lora_dropout = 0.05,
+        lora_target_modules = None,
     ):
         super().__init__()
 
@@ -379,6 +392,55 @@ class Mask3D(nn.Module):
             self.self_attention.append(tmp_self_attention)
             self.ffn_attention.append(tmp_ffn_attention)
             self.lin_squeeze.append(tmp_squeeze_attention)
+
+        # LoRA setup
+        self.use_lora = use_lora
+        self.lora_r = lora_r  
+        self.lora_alpha = lora_alpha
+        self.lora_dropout = lora_dropout
+        
+        if self.use_lora and PEFT_AVAILABLE:
+            # Define target modules for LoRA (attention layers + task-specific heads)
+            if lora_target_modules is None:
+                lora_target_modules = [
+                    # Attention layers
+                    "self_attn.in_proj_weight",
+                    "self_attn.out_proj",
+                    "multihead_attn.in_proj_weight", 
+                    "multihead_attn.out_proj",
+                    # Mask prediction layers
+                    "mask_embed_head.0",  # First linear layer in mask_embed_head
+                    "mask_embed_head.2",  # Second linear layer in mask_embed_head
+                    "class_embed_head.0", # First linear layer in class_embed_head
+                    "class_embed_head.2", # Second linear layer in class_embed_head
+                    "mask_features_head", # Conv layer for mask features
+                    # Articulation prediction layers
+                    "origin_embed_head.0",    # First linear layer in origin_embed_head
+                    "origin_embed_head.2",    # Second linear layer in origin_embed_head
+                    "origin_embed_head.4",    # Third linear layer in origin_embed_head
+                    "axis_embed_head.0",      # First linear layer in axis_embed_head
+                    "axis_embed_head.2",      # Second linear layer in axis_embed_head
+                    "axis_embed_head.4",      # Third linear layer in axis_embed_head
+                    "axis_embed_head_query.0", # First linear layer in axis_embed_head_query
+                    "axis_embed_head_query.2", # Second linear layer in axis_embed_head_query
+                    "axis_embed_head_query.4", # Third linear layer in axis_embed_head_query
+                    "feature_arti_emb",       # Conv layer for articulation features
+                ]
+            
+            # Create LoRA configuration
+            peft_config = LoraConfig(
+                task_type=TaskType.FEATURE_EXTRACTION,
+                inference_mode=False,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=lora_target_modules,
+                bias="none",
+            )
+            
+            self.peft_config = peft_config
+        else:
+            self.peft_config = None
 
         self.decoder_norm = nn.LayerNorm(hidden_dim)
             

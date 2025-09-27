@@ -80,6 +80,36 @@ class InstanceSegmentation(pl.LightningModule):
         self.save_hyperparameters()
         # model
         self.model = hydra.utils.instantiate(config.model)
+        
+        # Apply PEFT LoRA if enabled
+        if hasattr(self.model, 'use_lora') and self.model.use_lora:
+            if hasattr(self.model, 'peft_config') and self.model.peft_config is not None:
+                try:
+                    from peft import get_peft_model
+                    print(f"Applying LoRA with r={self.model.lora_r}, alpha={self.model.lora_alpha}")
+                    print(f"Target modules: {self.model.peft_config.target_modules}")
+                    
+                    # Apply LoRA to the model
+                    self.model = get_peft_model(self.model, self.model.peft_config)
+                    
+                    # Print parameter counts
+                    trainable_params = self.model.get_nb_trainable_parameters()
+                    total_params = self.model.num_parameters()
+                    print(f"LoRA applied successfully!")
+                    print(f"Trainable parameters: {trainable_params:,}")
+                    print(f"Total parameters: {total_params:,}")
+                    print(f"Percentage trainable: {100 * trainable_params / total_params:.2f}%")
+                    
+                except ImportError:
+                    print("PEFT not available. Install with: pip install peft")
+                    self.model.use_lora = False
+                except Exception as e:
+                    print(f"Error applying LoRA: {e}")
+                    self.model.use_lora = False
+            else:
+                print("LoRA enabled but no peft_config found. Disabling LoRA.")
+                self.model.use_lora = False
+        
         self.optional_freeze = nullcontext
         if config.general.freeze_backbone:
             self.optional_freeze = torch.no_grad

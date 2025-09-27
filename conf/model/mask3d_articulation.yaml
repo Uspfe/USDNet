@@ -60,3 +60,10 @@ config:
     in_channels: ${data.in_channels}
     out_channels: ${data.num_labels}
     out_fpn: true
+
+# LoRA fine-tuning parameters (using PEFT)
+use_lora: false  # Set to true to enable LoRA
+lora_r: ${general.LORA.R}
+lora_alpha: ${general.LORA.ALPHA}
+lora_dropout: ${general.LORA.DROPOUT}
+lora_target_modules: null
