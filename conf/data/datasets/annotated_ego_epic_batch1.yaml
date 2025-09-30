@@ -2,11 +2,11 @@
 train_dataset:
   _target_: datasets.semseg.SemanticSegmentationArticulationDataset
   dataset_name: "articulate3d"
-  data_dir: data/processed/annotated_ego_epic_batch1
+  data_dir: data/processed/annotated_ego_epic_batch1_articulate3d
   image_augmentations_path: null
   volume_augmentations_path: null
-  label_db_filepath: data/processed/annotated_ego_epic_batch1/label_database.yaml
-  color_mean_std: data/processed/annotated_ego_epic_batch1/color_mean_std.yaml
+  label_db_filepath: data/processed/annotated_ego_epic_batch1_articulate3d/label_database.yaml
+  color_mean_std: data/processed/annotated_ego_epic_batch1_articulate3d/color_mean_std.yaml
   data_percent: 1.0
   mode: ${data.train_mode}
   ignore_label: ${data.ignore_label}
@@ -41,11 +41,11 @@ train_dataset:
 validation_dataset:
   _target_: datasets.semseg.SemanticSegmentationArticulationDataset
   dataset_name: "articulate3d"
-  data_dir: data/processed/annotated_ego_epic_batch1
+  data_dir: data/processed/annotated_ego_epic_batch1_articulate3d
   image_augmentations_path: null
   volume_augmentations_path: null
-  label_db_filepath: data/processed/annotated_ego_epic_batch1/label_database.yaml
-  color_mean_std: data/processed/annotated_ego_epic_batch1/color_mean_std.yaml
+  label_db_filepath: data/processed/annotated_ego_epic_batch1_articulate3d/label_database.yaml
+  color_mean_std: data/processed/annotated_ego_epic_batch1_articulate3d/color_mean_std.yaml
   data_percent: 1.0
   mode: ${data.validation_mode}
   ignore_label: ${data.ignore_label}
@@ -70,11 +70,11 @@ validation_dataset:
 test_dataset:
   _target_: datasets.semseg.SemanticSegmentationArticulationDataset
   dataset_name: "articulate3d"
-  data_dir: data/processed/annotated_ego_epic_batch1
+  data_dir: data/processed/annotated_ego_epic_batch1_articulate3d
   image_augmentations_path: null
   volume_augmentations_path: null
-  label_db_filepath: data/processed/annotated_ego_epic_batch1/label_database.yaml
-  color_mean_std: data/processed/annotated_ego_epic_batch1/color_mean_std.yaml
+  label_db_filepath: data/processed/annotated_ego_epic_batch1_articulate3d/label_database.yaml
+  color_mean_std: data/processed/annotated_ego_epic_batch1_articulate3d/color_mean_std.yaml
   data_percent: 1.0
   mode: ${data.test_mode}
   ignore_label: ${data.ignore_label}

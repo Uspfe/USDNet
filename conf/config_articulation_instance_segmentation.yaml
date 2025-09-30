@@ -58,7 +58,33 @@ general:
   use_gt_movable_mask_val: false
   use_gt_movable_mask_as_pred_train: false
   use_gt_movable_mask_as_pred_val: false
-  
+
+  LORA:
+    USE_LORA: False
+    R: 8
+    ALPHA: 16
+    DROPOUT: 0.05
+    TARGET_MODULES: ["self_attn.in_proj_weight",
+                    "self_attn.out_proj",
+                    "multihead_attn.in_proj_weight", 
+                    "multihead_attn.out_proj",
+                    "mask_embed_head.0",
+                    "mask_embed_head.2",
+                    "class_embed_head.0",
+                    "class_embed_head.2",
+                    "mask_features_head",
+                    "origin_embed_head.0",
+                    "origin_embed_head.2",
+                    "origin_embed_head.4",
+                    "axis_embed_head.0",
+                    "axis_embed_head.2",
+                    "axis_embed_head.4",
+                    "axis_embed_head_query.0",
+                    "axis_embed_head_query.2",
+                    "axis_embed_head_query.4",
+                    "feature_arti_emb",
+                ]
+
 defaults:
   - data: indoor
   - data/data_loaders: simple_loader

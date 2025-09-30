@@ -198,35 +198,36 @@ class InstanceSegmentation(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
         
-        if self.debug:
-            import pickle
-            save_dir = os.path.join( self.config.general.save_dir, "debug", 
-                                    "train")
-            if not os.path.exists(save_dir):
-                os.makedirs(save_dir)
+        # if self.debug:
+        #     import pickle
+        #     save_dir = os.path.join( self.config.general.save_dir, "debug", 
+        #                             "train")
+        #     if not os.path.exists(save_dir):
+        #         os.makedirs(save_dir)
                 
-            coords = data.full_res_coords[0]
-            coords_dsp = data.coordinates.cpu().numpy()
-            # features = data.features.cpu().numpy()
-            if data.original_interaction_labels is not None:
-                raw_interaction_labels = data.original_interaction_labels[0].reshape(-1, 1)
-                coords = np.concatenate((coords, raw_interaction_labels), axis=1)
-            if self.eval_articulation:
-                articulation_dict_list = []
-                for target_item in target:
-                    articulation_dict_list.append(target_item["articulations_dict"])
-                with open(arti_file, "wb") as f:
-                    pickle.dump(articulation_dict_list, f)
-            file_name = file_names[0].split(".")[0]
-            coord_file = os.path.join(save_dir, f"{file_name}_coords.npy")
-            coord_dsp_file = os.path.join(save_dir, f"{file_name}_coords_dsp.npy")
-            np.save(coord_dsp_file, coords_dsp)
-            arti_file = os.path.join(save_dir, f"{file_name}_artis.pkl")
-            target_file = os.path.join(save_dir, f"{file_name}_target.pkl")
-            np.save(coord_file, coords)
+        #     coords = data.full_res_coords[0]
+        #     coords_dsp = data.coordinates.cpu().numpy()
+        #     # features = data.features.cpu().numpy()
+        #     if data.original_interaction_labels is not None and len(data.original_interaction_labels)!=0:
+        #         print("data.original_interaction_labels: ", data.original_interaction_labels)
+        #         raw_interaction_labels = data.original_interaction_labels[0].reshape(-1, 1)
+        #         coords = np.concatenate((coords, raw_interaction_labels), axis=1)
+        #     if self.eval_articulation:
+        #         articulation_dict_list = []
+        #         for target_item in target:
+        #             articulation_dict_list.append(target_item["articulations_dict"])
+        #         with open(arti_file, "wb") as f:
+        #             pickle.dump(articulation_dict_list, f)
+        #     file_name = file_names[0].split(".")[0]
+        #     coord_file = os.path.join(save_dir, f"{file_name}_coords.npy")
+        #     coord_dsp_file = os.path.join(save_dir, f"{file_name}_coords_dsp.npy")
+        #     np.save(coord_dsp_file, coords_dsp)
+        #     arti_file = os.path.join(save_dir, f"{file_name}_artis.pkl")
+        #     target_file = os.path.join(save_dir, f"{file_name}_target.pkl")
+        #     np.save(coord_file, coords)
 
-            with open(target_file, "wb") as f:
-                pickle.dump(target, f)
+        #     with open(target_file, "wb") as f:
+        #         pickle.dump(target, f)
 
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")

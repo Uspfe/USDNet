@@ -19,7 +19,7 @@ import volumentations as V
 import yaml
 import pickle
 
-# from yaml import CLoader as Loader
+from yaml import CLoader as Loader
 from torch.utils.data import Dataset
 from datasets.scannet200.scannet200_constants import (
     SCANNET_COLOR_MAP_200,
@@ -943,8 +943,8 @@ class SemanticSegmentationDataset(Dataset):
     @staticmethod
     def _load_yaml(filepath):
         with open(filepath) as f:
-            # file = yaml.load(f, Loader=Loader)
-            file = yaml.load(f)
+            file = yaml.load(f, Loader=Loader)
+            # file = yaml.load(f)
         return file
 
     def _select_correct_labels(self, labels, num_labels):
