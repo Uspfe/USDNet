@@ -1,0 +1,61 @@
+[workspace]
+authors = ["Uspfe <benjamin.bogenberger@tum.de>"]
+channels = ["conda-forge"]
+name = "USDNet"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[dependencies]
+python = "==3.12"
+pyyaml = ">=6.0.3,<7"
+openblas = ">=0.3.32,<0.4"
+pip = "*"
+numpy = "<=1.26.0"
+cuda-nvcc = ">=12.9.86,<13"
+cxx-compiler = ">=1.11.0,<2"
+libcusparse-dev = ">=12.5.10.65,<13"
+libcublas-dev = ">=12.9.1.4,<13"
+cuda-toolkit = ">=12.9.1,<13"
+cuda-nvtx-dev = ">=12.9.79,<13"
+ninja = ">=1.13.2,<2"
+scipy = ">=1.17.1,<2"
+imageio = ">=2.37.0,<3"
+plyfile = ">=1.1,<2"
+loguru = ">=0.7.3,<0.8"
+wandb = ">=0.25.1,<0.26"
+
+
+[pypi-options]
+no-build-isolation = ["detectron2", "pointnet2"]
+
+[pypi-dependencies]
+torch = { version = "==2.9.0", index = "https://download.pytorch.org/whl/cu128" }
+torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu128" }
+torch-scatter = { url = "https://data.pyg.org/whl/torch-2.9.0%2Bcu128/torch_scatter-2.1.2%2Bpt29cu128-cp312-cp312-linux_x86_64.whl" }
+detectron2 = { git = "https://github.com/facebookresearch/detectron2.git" }
+usd-core = ">=26.3, <27"
+pytorch-lightning = ">=2.6.1, <3"
+torchmetrics = ">=1.9.0, <2"
+h5py = ">=3.16.0, <4"
+# MinkowskiEngine = { git = "https://github.com/StanfordVL/MinkowskiEngine" }
+pointnet2 = { path = "third_party/pointnet2" }
+dotenv = ">=0.9.9, <0.10"
+pyviz3d = ">=0.5.1, <0.6"
+scikit-learn = ">=1.8.0, <2"
+peft = ">=0.18.1, <0.19"
+hydra-core = "==1.3.2"
+# hydra-core = "==1.1.0"
+
+[system-requirements]
+cuda = "12.8"
+
+[activation.env]
+CUDA_HOME="$CONDA_PREFIX"
+TORCH_NVCC_FLAGS="-DNVTX_DISABLE"
+CXXFLAGS="-DNVTX_DISABLE"
+
+# [activation]
+# scripts = [
+#     "tools/setup_minkowski_engine.sh",
+#     "tools/setup_scannet.sh",
+# ]
