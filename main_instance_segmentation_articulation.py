@@ -67,7 +67,9 @@ def get_parameters(cfg: DictConfig):
 
 
 @hydra.main(
-    config_path="conf", config_name="config_articulation_instance_segmentation.yaml"
+    version_base="1.1",
+    config_path="conf",
+    config_name="config_articulation_instance_segmentation.yaml",
 )
 def train(cfg: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
@@ -91,7 +93,9 @@ def train(cfg: DictConfig):
 
 
 @hydra.main(
-    config_path="conf", config_name="config_articulation_instance_segmentation.yaml"
+    version_base="1.1",
+    config_path="conf",
+    config_name="config_articulation_instance_segmentation.yaml",
 )
 def test(cfg: DictConfig):
     # because hydra wants to change dir for some reason
@@ -100,6 +104,10 @@ def test(cfg: DictConfig):
     
     trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
     ckpt_path = trainer_kwargs.pop("resume_from_checkpoint", None)
+    ckpt_path = "/home/benni/repos/USDNet/mov_trainval.ckpt"
+    print(f"Testing with checkpoint: {ckpt_path}")
+    print("############################################################")
+    # return
 
     runner = Trainer(
         accelerator="gpu", 
@@ -108,11 +116,13 @@ def test(cfg: DictConfig):
         default_root_dir=cfg.general.save_dir,
         **trainer_kwargs,
     )
-    runner.test(model, ckpt_path=ckpt_path)
+    runner.test(model, ckpt_path=ckpt_path, weights_only=False)
 
 
 @hydra.main(
-    config_path="conf", config_name="config_articulation_instance_segmentation.yaml"
+    version_base="1.1",
+    config_path="conf",
+    config_name="config_articulation_instance_segmentation.yaml",
 )
 def main(cfg: DictConfig):
     if cfg["general"]["train_mode"]:

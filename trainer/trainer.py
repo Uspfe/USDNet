@@ -150,6 +150,9 @@ class InstanceSegmentation(pl.LightningModule):
         self.bbox_preds = dict()
         self.bbox_gt = dict()
         self.gt_artis = dict()
+        self._train_step_losses = []
+        self._validation_step_outputs = []
+        self._test_step_outputs = []
 
         self.criterion = hydra.utils.instantiate(
             config.loss, matcher=matcher, weight_dict=weight_dict, _recursive_=False,
@@ -310,10 +313,22 @@ class InstanceSegmentation(pl.LightningModule):
             logs["mean_loss_dice"] = statistics.mean(loss_dice_list)
 
         self.log_dict(logs)
-        return sum(losses.values())
+        total_loss = sum(losses.values())
+        self._train_step_losses.append(total_loss.detach().cpu().item())
+        return total_loss
+
+    def on_train_epoch_end(self):
+        if not self._train_step_losses:
+            return
+        train_loss = statistics.mean(self._train_step_losses)
+        self.log_dict({"train_loss_mean": train_loss}, on_epoch=True)
+        self._train_step_losses.clear()
 
     def validation_step(self, batch, batch_idx):
-        return self.eval_step(batch, batch_idx)
+        output = self.eval_step(batch, batch_idx)
+        if output is not None:
+            self._validation_step_outputs.append(output)
+        return output
 
     def export(self, pred_masks, scores, pred_classes, file_names, decoder_id):
         root_path = f"eval_output"
@@ -342,15 +357,19 @@ class InstanceSegmentation(pl.LightningModule):
                         f"pred_mask/{file_name}_{real_id}.txt {pred_class} {score}\n"
                     )
 
-    def training_epoch_end(self, outputs):
-        train_loss = sum([out["loss"].cpu().item() for out in outputs]) / len(
-            outputs
-        )
-        results = {"train_loss_mean": train_loss}
-        self.log_dict(results, on_epoch=True)
+    def on_validation_epoch_start(self):
+        self._validation_step_outputs.clear()
 
-    def validation_epoch_end(self, outputs):
-        self.test_epoch_end(outputs, mode = "validation")
+    def on_validation_epoch_end(self):
+        self._finalize_eval_epoch(self._validation_step_outputs, mode="validation")
+        self._validation_step_outputs.clear()
+
+    def on_test_epoch_start(self):
+        self._test_step_outputs.clear()
+
+    def on_test_epoch_end(self):
+        self._finalize_eval_epoch(self._test_step_outputs, mode="test")
+        self._test_step_outputs.clear()
 
     def save_visualizations(
         self,
@@ -711,7 +730,10 @@ class InstanceSegmentation(pl.LightningModule):
         # }
 
     def test_step(self, batch, batch_idx):
-        return self.eval_step(batch, batch_idx)
+        output = self.eval_step(batch, batch_idx)
+        if output is not None:
+            self._test_step_outputs.append(output)
+        return output
 
     def get_full_res_mask(
         self, mask, inverse_map, point2segment_full, is_heatmap=False
@@ -1971,17 +1993,15 @@ class InstanceSegmentation(pl.LightningModule):
         self.bbox_preds = dict()
         self.bbox_gt = dict()
 
-    def test_epoch_end(self, outputs, mode = 'test'):
+    def _finalize_eval_epoch(self, outputs, mode='test'):
         if self.config.general.export:
             return
 
         self.eval_instance_epoch_end(mode)
-        # print("outputs: ", outputs)
         dd = defaultdict(list)
         for output in outputs:
             for key, val in output.items():  # .items() in Python 3.
                 dd[key].append(val)
-        
 
         dd = {k: statistics.mean(v) for k, v in dd.items()}
 
@@ -1999,7 +2019,8 @@ class InstanceSegmentation(pl.LightningModule):
         if len(loss_dice_list) > 0:
             dd["mean_loss_dice"] = statistics.mean(loss_dice_list)
 
-        self.log_dict(dd, on_epoch=True)
+        if dd:
+            self.log_dict(dd, on_epoch=True)
 
     def configure_optimizers(self):
         optimizer = hydra.utils.instantiate(
@@ -2017,6 +2038,17 @@ class InstanceSegmentation(pl.LightningModule):
         return [optimizer], [scheduler_config]
 
     def prepare_data(self):
+        # In pure inference mode we only need the test dataset.
+        if (not self.config.general.train_mode) and (
+            str(self.config.data.test_mode).lower() == "test"
+        ):
+            self.test_dataset = hydra.utils.instantiate(
+                self.config.data.test_dataset, _recursive_=False
+            )
+            self.validation_dataset = self.test_dataset
+            self.labels_info = self.test_dataset.label_info
+            return
+
         self.train_dataset = hydra.utils.instantiate(
             self.config.data.train_dataset, _recursive_=False
         )
