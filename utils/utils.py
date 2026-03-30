@@ -127,7 +127,7 @@ def load_interaction_backbone_from_checkpoint(cfg, model):
 
 
 def load_checkpoint_with_missing_or_exsessive_keys(cfg, model):
-    state_dict = torch.load(cfg.general.checkpoint)["state_dict"]
+    state_dict = torch.load(cfg.general.checkpoint, weights_only=False)["state_dict"]
     correct_dict = dict(model.state_dict())
 
     # if parametrs not found in checkpoint they will be randomly initialized
@@ -138,7 +138,7 @@ def load_checkpoint_with_missing_or_exsessive_keys(cfg, model):
             )
 
     # if parametrs have different shape, it will randomly initialize
-    state_dict = torch.load(cfg.general.checkpoint)["state_dict"]
+    state_dict = torch.load(cfg.general.checkpoint, weights_only=False)["state_dict"]
     correct_dict = dict(model.state_dict())
     for key in correct_dict.keys():
         if key not in state_dict:

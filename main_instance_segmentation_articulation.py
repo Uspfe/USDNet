@@ -97,13 +97,18 @@ def test(cfg: DictConfig):
     # because hydra wants to change dir for some reason
     os.chdir(hydra.utils.get_original_cwd())
     cfg, model, loggers = get_parameters(cfg)
+    
+    trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
+    ckpt_path = trainer_kwargs.pop("resume_from_checkpoint", None)
+
     runner = Trainer(
-        gpus=cfg.general.gpus,
+        accelerator="gpu", 
+        devices=cfg.general.gpus,
         logger=loggers,
-        weights_save_path=str(cfg.general.save_dir),
-        **cfg.trainer,
+        default_root_dir=cfg.general.save_dir,
+        **trainer_kwargs,
     )
-    runner.test(model)
+    runner.test(model, ckpt_path=ckpt_path)
 
 
 @hydra.main(

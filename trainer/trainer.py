@@ -1,5 +1,6 @@
 import gc
 from contextlib import nullcontext
+import json
 from pathlib import Path
 import statistics
 import shutil
@@ -20,6 +21,7 @@ from datasets.scannet200.scannet200_splits import (
 )
 
 import hydra
+from omegaconf import OmegaConf
 import MinkowskiEngine as ME
 import numpy as np
 import pytorch_lightning as pl
@@ -79,7 +81,7 @@ class InstanceSegmentation(pl.LightningModule):
         self.config = config
         self.save_hyperparameters()
         # model
-        self.model = hydra.utils.instantiate(config.model)
+        self.model = hydra.utils.instantiate(config.model, _recursive_=False)
         
         # Apply PEFT LoRA if enabled
         if hasattr(self.model, 'use_lora') and self.model.use_lora:
@@ -116,7 +118,7 @@ class InstanceSegmentation(pl.LightningModule):
         # loss
         self.ignore_label = config.data.ignore_label
 
-        matcher = hydra.utils.instantiate(config.matcher)
+        matcher = hydra.utils.instantiate(config.matcher, _recursive_=False)
         weight_dict = {
             "loss_ce": matcher.cost_class,
             "loss_mask": matcher.cost_mask,
@@ -150,11 +152,11 @@ class InstanceSegmentation(pl.LightningModule):
         self.gt_artis = dict()
 
         self.criterion = hydra.utils.instantiate(
-            config.loss, matcher=matcher, weight_dict=weight_dict
+            config.loss, matcher=matcher, weight_dict=weight_dict, _recursive_=False,
         )
 
         # metrics
-        self.confusion = hydra.utils.instantiate(config.metrics)
+        self.confusion = hydra.utils.instantiate(config.metrics, _recursive_=False)
         self.iou = IoU()
         # misc
         self.labels_info = dict()
@@ -2001,14 +2003,14 @@ class InstanceSegmentation(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = hydra.utils.instantiate(
-            self.config.optimizer, params=self.parameters()
+            self.config.optimizer, params=self.parameters(), _recursive_=False
         )
         if "steps_per_epoch" in self.config.scheduler.scheduler.keys():
             self.config.scheduler.scheduler.steps_per_epoch = len(
                 self.train_dataloader()
             )
         lr_scheduler = hydra.utils.instantiate(
-            self.config.scheduler.scheduler, optimizer=optimizer
+            self.config.scheduler.scheduler, optimizer=optimizer, _recursive_=False
         )
         scheduler_config = {"scheduler": lr_scheduler}
         scheduler_config.update(self.config.scheduler.pytorch_lightning_params)
@@ -2016,36 +2018,39 @@ class InstanceSegmentation(pl.LightningModule):
 
     def prepare_data(self):
         self.train_dataset = hydra.utils.instantiate(
-            self.config.data.train_dataset
+            self.config.data.train_dataset, _recursive_=False
         )
         self.validation_dataset = hydra.utils.instantiate(
-            self.config.data.validation_dataset
+            self.config.data.validation_dataset, _recursive_=False
         )
         self.test_dataset = hydra.utils.instantiate(
-            self.config.data.test_dataset
+            self.config.data.test_dataset, _recursive_=False
         )
         self.labels_info = self.train_dataset.label_info
 
     def train_dataloader(self):
-        c_fn = hydra.utils.instantiate(self.config.data.train_collation)
+        c_fn = hydra.utils.instantiate(self.config.data.train_collation, _recursive_=False)
         return hydra.utils.instantiate(
             self.config.data.train_dataloader,
             self.train_dataset,
             collate_fn=c_fn,
+            _recursive_=False,
         )
 
     def val_dataloader(self):
-        c_fn = hydra.utils.instantiate(self.config.data.validation_collation)
+        c_fn = hydra.utils.instantiate(self.config.data.validation_collation, _recursive_=False)
         return hydra.utils.instantiate(
             self.config.data.validation_dataloader,
             self.validation_dataset,
             collate_fn=c_fn,
+            _recursive_=False,
         )
 
     def test_dataloader(self):
-        c_fn = hydra.utils.instantiate(self.config.data.test_collation)
+        c_fn = hydra.utils.instantiate(self.config.data.test_collation, _recursive_=False)
         return hydra.utils.instantiate(
             self.config.data.test_dataloader,
             self.test_dataset,
             collate_fn=c_fn,
+            _recursive_=False,
         )
