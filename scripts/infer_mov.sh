@@ -1,8 +1,9 @@
 #!/bin/bash
+set -euo pipefail
 
 # inference the movable part segmentation and articulation prediction
 
-cd USDNet # TODO: change the path to the USDNet directory
+# cd USDNet # TODO: change the path to the USDNet directory
 
 # NOTE:
 # 1. Please check TODOs before running the script
@@ -17,12 +18,15 @@ CURR_DBSCAN=0.95
 CURR_TOPK=150
 CURR_QUERY=100
 
-BACKBONE_CKPT="checkpoint from training"
+BACKBONE_CKPT="mov_trainval.ckpt"
 SAVE_DIR=./results/inference_mov_articulation 
+DATA_DB=./data/processed/articulate3d_challenge_mov/test_database.yaml
+
+mkdir -p $SAVE_DIR
 
 # inference to get the predictions
 python main_instance_segmentation_articulation.py \
-general.experiment_name="inference_mov_articulation " \
+general.experiment_name="inference_mov_articulation" \
 general.project_name="articulate3d_challenge" \
 data/datasets=articulate3d_challenge_mov \
 general.num_targets=4 \
@@ -47,7 +51,7 @@ data.use_coarse_to_fine=true \
 data.c2f_rad=0.1 \
 data.c2f_decay=0.4 \
 data.c2f_alpha=100 \
-data.test_mode="test" \
+data.test_mode="validation" \
 model.num_queries=${CURR_QUERY} \
 model.predict_articulation_mode=2 \
 model.predict_hierarchy_interaction=false \
@@ -57,9 +61,16 @@ loss.losses="[labels,masks, articulations]" \
 trainer.check_val_every_n_epoch=20 \
 optimizer.lr=0.0001 \
 
+PREDS_PKL="$SAVE_DIR/debug/val_preds/preds.pkl"
+if [ ! -f "$PREDS_PKL" ]; then
+	echo "Expected predictions file not found: $PREDS_PKL"
+	echo "Inference did not produce outputs; check earlier errors in logs."
+	exit 1
+fi
+
 # trainsfer the prediction from .pickle to the format of the scannet 3D instance segmentation in .zip to save space for submission
 python transfer_preds_files.py \
---preds_pkl_dir $SAVE_DIR/debug/val_preds/preds.pkl \
+--preds_pkl_dir "$PREDS_PKL" \
 --preds_dir $SAVE_DIR/mov_test 
 
 # zip the preds_dir

@@ -225,10 +225,10 @@ class SemanticSegmentationDataset(Dataset):
             database_path = Path(database_path)
             if self.dataset_name != "s3dis":
                 if not (database_path / f"{mode}_database.yaml").exists():
-                    print(
-                        f"generate {database_path}/{mode}_database.yaml first"
+                    raise FileNotFoundError(
+                        f"Missing dataset index: {database_path}/{mode}_database.yaml. "
+                        "Generate preprocessing database files first."
                     )
-                    exit()
                 self._data.extend(
                     self._load_yaml(database_path / f"{mode}_database.yaml")
                 )
@@ -239,10 +239,10 @@ class SemanticSegmentationDataset(Dataset):
                 if not (
                     database_path / f"{mode_s3dis}_database.yaml"
                 ).exists():
-                    print(
-                        f"generate {database_path}/{mode_s3dis}_database.yaml first"
+                    raise FileNotFoundError(
+                        f"Missing dataset index: {database_path}/{mode_s3dis}_database.yaml. "
+                        "Generate preprocessing database files first."
                     )
-                    exit()
                 self._data.extend(
                     self._load_yaml(
                         database_path / f"{mode_s3dis}_database.yaml"

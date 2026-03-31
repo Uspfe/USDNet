@@ -106,8 +106,6 @@ def test(cfg: DictConfig):
     ckpt_path = trainer_kwargs.pop("resume_from_checkpoint", None)
     ckpt_path = "/home/benni/repos/USDNet/mov_trainval.ckpt"
     print(f"Testing with checkpoint: {ckpt_path}")
-    print("############################################################")
-    # return
 
     runner = Trainer(
         accelerator="gpu", 
