@@ -8,8 +8,7 @@
 
 cd USDNet # TODO: change the path to the USDNet directory
 
-export WANDB_API_KEY="your wandb api key for log" # TODO: set the API key of your WANDB account
-export WANDB_MODE="online"
+export WANDB_MODE="offline"
 export OMP_NUM_THREADS=3  # speeds up MinkowskiEngine
 export CUDA_LAUNCH_BLOCKING=1
 GPUS=1
@@ -17,7 +16,7 @@ CURR_DBSCAN=0.95
 CURR_TOPK=150
 CURR_QUERY=100
 
-BACKBONE_CKPT="checkpoint from training" # TODO
+BACKBONE_CKPT="./checkpoints/inter_trainval.ckpt"
 SAVE_DIR=./results/inference_inter_seg
 
 python main_instance_segmentation_articulation.py \
@@ -45,7 +44,7 @@ data.use_coarse_to_fine=true \
 data.c2f_rad=0.1 \
 data.c2f_decay=0.4 \
 data.c2f_alpha=100 \
-data.test_mode="test" \
+data.test_mode="validation" \
 model.num_queries=${CURR_QUERY} \
 model.predict_articulation_mode=2 \
 model.predict_hierarchy_interaction=false \

@@ -10,7 +10,7 @@ set -euo pipefail
 # 2. general.debug is set to true to save the predictions in pickle format
 
 export WANDB_API_KEY="your wandb api key for log"
-export WANDB_MODE="online"
+export WANDB_MODE="offline"
 export OMP_NUM_THREADS=3  # speeds up MinkowskiEngine
 export CUDA_LAUNCH_BLOCKING=1
 GPUS=1
@@ -18,7 +18,7 @@ CURR_DBSCAN=0.95
 CURR_TOPK=150
 CURR_QUERY=100
 
-BACKBONE_CKPT="mov_trainval.ckpt"
+BACKBONE_CKPT="./checkpoints/mov_trainval.ckpt"
 SAVE_DIR=./results/inference_mov_articulation 
 DATA_DB=./data/processed/articulate3d_challenge_mov/test_database.yaml
 

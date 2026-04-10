@@ -103,9 +103,8 @@ def test(cfg: DictConfig):
     cfg, model, loggers = get_parameters(cfg)
     
     trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
-    ckpt_path = trainer_kwargs.pop("resume_from_checkpoint", None)
-    ckpt_path = "/home/benni/repos/USDNet/mov_trainval.ckpt"
-    print(f"Testing with checkpoint: {ckpt_path}")
+    _ = trainer_kwargs.pop("resume_from_checkpoint", None)
+    ckpt_path = cfg.general.checkpoint
 
     runner = Trainer(
         accelerator="gpu", 
