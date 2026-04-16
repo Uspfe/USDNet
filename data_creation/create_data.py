@@ -25,6 +25,7 @@ class OccludedViewResult:
 
     scene_id: str
     visible_mesh_indices: Int[np.ndarray, "M"]  # (M,) indices into mesh.vertices
+    visible_triangle_indices: np.ndarray  # (Ntri,) indices into mesh.triangles where all 3 vertices are visible
     orientation_quat: np.ndarray  # (4,) quaternion
     intrinsics: np.ndarray  # (3, 3) camera matrix
     range: float
@@ -36,6 +37,7 @@ class OccludedViewResult:
             "scene_id": self.scene_id,
             "camera_pos": self.camera_pos.tolist(),
             "visible_mesh_indices": self.visible_mesh_indices.tolist(),
+            "visible_triangle_indices": self.visible_triangle_indices.tolist(),
             "orientation_quat": self.orientation_quat.tolist(),
             "intrinsics": self.intrinsics.tolist(),
             "range": float(self.range),
@@ -181,7 +183,7 @@ class OccludedArticulate3DCreator:
         orientation: Float[np.ndarray, "3 3"],
         range: float,
         intrinsics: Float[np.ndarray, "3 3"],
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Get visible point indices from a given camera view using raycasting.
 
         Uses the mesh representation and raycasting to determine which points
@@ -232,7 +234,7 @@ class OccludedArticulate3DCreator:
         frustum_vertices = vertices[in_frustum]
 
         if len(frustum_vertices) == 0:
-            return np.array([], dtype=np.int64)
+            return np.array([], dtype=np.int64), np.array([], dtype=np.int64)
 
         # Now perform visibility check using raycasting
         num_points = frustum_vertices.shape[0]
@@ -270,7 +272,15 @@ class OccludedArticulate3DCreator:
         visible_mask = hit_distances >= ray_distances - epsilon
 
         visible_indices = frustum_indices[visible_mask]
-        return visible_indices
+
+        visible_set = set(visible_indices.tolist())
+        triangles = self.mesh.triangle.indices.numpy()  # (F, 3)
+        visible_triangle_indices = np.array(
+            [i for i, tri in enumerate(triangles) if tri[0] in visible_set and tri[1] in visible_set and tri[2] in visible_set],
+            dtype=np.int64,
+        )
+
+        return visible_indices, visible_triangle_indices
 
     def validate_view(self, result: OccludedViewResult) -> bool:
         """Validate whether an occluded view is acceptable.
@@ -322,7 +332,7 @@ class OccludedArticulate3DCreator:
             ]
         )
 
-        visible_indices = self.get_visible_points_from_view(
+        visible_indices, visible_triangle_indices = self.get_visible_points_from_view(
             camera_pos,
             orientation_matrix,
             range,
@@ -332,6 +342,7 @@ class OccludedArticulate3DCreator:
         result = OccludedViewResult(
             scene_id=self.scene_id,
             visible_mesh_indices=visible_indices,
+            visible_triangle_indices=visible_triangle_indices,
             orientation_quat=orientation_quat,
             intrinsics=intrinsics_matrix,
             range=range,
@@ -359,7 +370,13 @@ class OccludedArticulate3DCreator:
         visible_pcd = o3d.geometry.PointCloud()
         visible_points = self.mesh.vertex.positions.numpy()[result.visible_mesh_indices]
         visible_pcd.points = o3d.utility.Vector3dVector(visible_points)
-        visible_pcd.paint_uniform_color([1, 0, 0])
+        visible_pcd.paint_uniform_color([0, 1, 0])
+
+        # load mesh as triangle mesh for visualization
+        mesh_vis = o3d.geometry.TriangleMesh()
+        mesh_vis.vertices = pcd.points
+        mesh_vis.triangles = o3d.utility.Vector3iVector(self.mesh.triangle.indices.numpy()[result.visible_triangle_indices, :])
+        mesh_vis.paint_uniform_color([1, 0, 0])
 
         # draw camera position and viewing arrow
         camera_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.05)
@@ -378,4 +395,4 @@ class OccludedArticulate3DCreator:
         )
         arrow = arrow.translate(result.camera_pos)
         arrow.paint_uniform_color([0, 1, 0])
-        o3d.visualization.draw_geometries([pcd, visible_pcd, camera_sphere, arrow])  # type: ignore
+        o3d.visualization.draw_geometries([pcd, visible_pcd, mesh_vis, camera_sphere, arrow])  # type: ignore
