@@ -30,6 +30,8 @@ open3d = ">=0.19.0,<0.20"
 fire = ">=0.7.1,<0.8"
 natsort = ">=8.4.0,<9"
 ipykernel = ">=7.2.0,<8"
+jaxtyping = ">=0.3.7,<0.4"
+rtree = ">=1.4.1,<2"
 
 
 [pypi-options]
@@ -62,6 +64,7 @@ CUDA_HOME="$CONDA_PREFIX"
 TORCH_NVCC_FLAGS="-DNVTX_DISABLE"
 CXXFLAGS="-DNVTX_DISABLE"
 SCANNET_ROOT="/home/benni/repos/ScanNet++/data"  # Set to your ScanNet root directory path
+ARTICULATE_3D_DATA_ROOT = "/home/benni/repos/USDNet/data/raw/articulate3d"
 
 # [activation]
 # scripts = [

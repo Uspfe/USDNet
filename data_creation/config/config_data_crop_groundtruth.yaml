@@ -1,0 +1,39 @@
+defaults:
+  - override hydra/job_logging: default
+  - override hydra/hydra_logging: default
+
+general:
+  seed: 42
+  verbose: false
+
+crop_groundtruth:
+  output_dir: "/home/benni/repos/USDNet/data/raw/OccArticulate3d"
+  cropped_scenes: "/home/benni/repos/USDNet/data/raw/OccArticulate3d/dataset.json"
+  articulate3d_dir: "/home/benni/repos/USDNet/data/raw/articulate3d"
+
+hydra:
+  run:
+    dir: saved/data_creation/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: "[%(levelname)s] - %(message)s"
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers: [console]
+  hydra_logging:
+    version: 1
+    formatters:
+      simple:
+        format: "[%(levelname)s] - %(message)s"
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout

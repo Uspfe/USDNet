@@ -1,0 +1,69 @@
+defaults:
+  - override hydra/job_logging: default
+  - override hydra/hydra_logging: default
+
+general:
+  seed: 42
+  verbose: false
+
+data_creation:
+  output_dir: "/home/benni/repos/USDNet/data/raw/OccArticulate3d"
+  # List of scene IDs to process
+  scene_ids:
+    - 0a76e06478
+  
+  camera_intrinsics:
+    - fx: 500
+      fy: 500
+      cx: 320
+      cy: 240
+    - fx: 1080
+      fy: 1920
+      cx: 320
+      cy: 240
+  
+  view_generation:
+    # Range values to test (depth from camera)
+    range_values: [2.0, 3.0, 5.0]
+    
+    # Camera orientations as quaternions [w, x, y, z]
+    # Look along x-axis: 90 degree rotation around y
+    orientations:
+      - [0.7071, 0, 0.7071, 0]
+      - [0.6533, 0.2706, 0.6533, 0.2706]
+    
+    # Density of observation (camera) points (grid spacing)
+    observation_point_density: 1
+    
+    # Number of camera poses to sample per scene+config combination
+    samples_per_scene: 1e8
+    
+    # Whether to visualize generated views
+    visualize: false
+
+hydra:
+  run:
+    dir: saved/data_creation/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: "[%(levelname)s] - %(message)s"
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers: [console]
+  hydra_logging:
+    version: 1
+    formatters:
+      simple:
+        format: "[%(levelname)s] - %(message)s"
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
