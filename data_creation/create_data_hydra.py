@@ -125,16 +125,16 @@ def create_data(cfg: DictConfig) -> None:
                         continue
 
                     name = f"{scene_id}_{per_scene_counter}"
-                    local_path = Path("views") / f"{name}.json"
+                    local_path = Path(f"{name}.json")
                     result_file = output_path / local_path
                     result_dict = result.to_dict()
                     with open(result_file, "w") as f:
                         json.dump(result_dict, f)
 
                     result_dict.pop("visible_mesh_indices", None)
+                    result_dict.pop("visible_triangle_indices", None)
                     result_dict["path"] = local_path.as_posix()
                     all_results[name] = result_dict
-
 
                     logger.info(
                         f"Generated view: scene={scene_id}_{per_scene_counter}, cam_idx={cam_idx}, "
@@ -161,7 +161,6 @@ def create_data(cfg: DictConfig) -> None:
     with open(results_file, "w") as f:
         json.dump(all_results, f)
     logger.info(f"All results saved to {results_file}")
-
 
 
 if __name__ == "__main__":

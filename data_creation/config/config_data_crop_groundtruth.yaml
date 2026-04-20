@@ -8,8 +8,21 @@ general:
 
 crop_groundtruth:
   output_dir: "/home/benni/repos/USDNet/data/raw/OccArticulate3d"
-  cropped_scenes: "/home/benni/repos/USDNet/data/raw/OccArticulate3d/dataset.json"
+  cropped_scenes: "/home/benni/repos/USDNet/data/raw/OccArticulate3dViews/dataset.json"
   articulate3d_dir: "/home/benni/repos/USDNet/data/raw/articulate3d"
+  min_visibility_threshold: 0.1
+  # true  → output_dir/scans/{view_id}/{view_id}_artic.json + symlinked mesh
+  #          splits written to output_dir/splits/
+  # false → flat layout (all files directly in output_dir)
+  structured_layout: true
+  # path to ScanNet root; null falls back to $SCANNET_ROOT env var
+  scannet_root: null
+  split:
+    train_ratio: 0.7
+    test_ratio: 0.15
+    # val_ratio is implicitly 1 - train_ratio - test_ratio = 0.15
+    # fraction of views WITH articulations in the final dataset (null = preserve natural ratio)
+    artic_ratio: 0.5
 
 hydra:
   run:

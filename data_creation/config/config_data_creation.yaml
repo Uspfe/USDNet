@@ -7,7 +7,7 @@ general:
   verbose: false
 
 data_creation:
-  output_dir: "/home/benni/repos/USDNet/data/raw/OccArticulate3d"
+  output_dir: "/home/benni/repos/USDNet/data/raw/OccArticulate3dViews"
   # List of scene IDs to process
   scene_ids:
     - 0a76e06478

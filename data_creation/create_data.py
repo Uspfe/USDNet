@@ -25,7 +25,9 @@ class OccludedViewResult:
 
     scene_id: str
     visible_mesh_indices: Int[np.ndarray, "M"]  # (M,) indices into mesh.vertices
-    visible_triangle_indices: np.ndarray  # (Ntri,) indices into mesh.triangles where all 3 vertices are visible
+    visible_triangle_indices: (
+        np.ndarray
+    )  # (Ntri,) indices into mesh.triangles where all 3 vertices are visible
     orientation_quat: np.ndarray  # (4,) quaternion
     intrinsics: np.ndarray  # (3, 3) camera matrix
     range: float
@@ -276,7 +278,13 @@ class OccludedArticulate3DCreator:
         visible_set = set(visible_indices.tolist())
         triangles = self.mesh.triangle.indices.numpy()  # (F, 3)
         visible_triangle_indices = np.array(
-            [i for i, tri in enumerate(triangles) if tri[0] in visible_set and tri[1] in visible_set and tri[2] in visible_set],
+            [
+                i
+                for i, tri in enumerate(triangles)
+                if tri[0] in visible_set
+                and tri[1] in visible_set
+                and tri[2] in visible_set
+            ],
             dtype=np.int64,
         )
 
@@ -375,7 +383,9 @@ class OccludedArticulate3DCreator:
         # load mesh as triangle mesh for visualization
         mesh_vis = o3d.geometry.TriangleMesh()
         mesh_vis.vertices = pcd.points
-        mesh_vis.triangles = o3d.utility.Vector3iVector(self.mesh.triangle.indices.numpy()[result.visible_triangle_indices, :])
+        mesh_vis.triangles = o3d.utility.Vector3iVector(
+            self.mesh.triangle.indices.numpy()[result.visible_triangle_indices, :]
+        )
         mesh_vis.paint_uniform_color([1, 0, 0])
 
         # draw camera position and viewing arrow
@@ -395,4 +405,6 @@ class OccludedArticulate3DCreator:
         )
         arrow = arrow.translate(result.camera_pos)
         arrow.paint_uniform_color([0, 1, 0])
-        o3d.visualization.draw_geometries([pcd, visible_pcd, mesh_vis, camera_sphere, arrow])  # type: ignore
+        o3d.visualization.draw_geometries(
+            [pcd, visible_pcd, mesh_vis, camera_sphere, arrow]
+        )  # type: ignore

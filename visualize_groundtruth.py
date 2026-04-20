@@ -6,10 +6,17 @@ Loads raw scene data (parts.json, artic.json, mesh.ply) and displays:
 - Inferred connectivity between parts (derived from label hierarchy)
 - Articulation joints (origin markers + axis arrows + rotation loops)
 
-Usage:
+Two dataset layouts are supported:
+
+  Original articulate3d (full scenes):
     python visualize_groundtruth.py --scene-id 0a5c013435 \\
         --articulate3d-dir data/raw/articulate3d \\
         --scannet-dir <SCANNET_ROOT> \\
+        --show-connectivity --show-joints
+
+  Cropped OccArticulate3d (per-view subsets):
+    python visualize_groundtruth.py --view-id 0a5c013435_1 \\
+        --occ-dir data/raw/OccArticulate3d \\
         --show-connectivity --show-joints
 """
 
@@ -622,32 +629,17 @@ def render_articulations(
 # Main Visualization
 # ============================================================================
 
-def visualize_articulate3d_scene(
-    scene_id: str,
-    articulate3d_dir: Path,
-    scannet_dir: Path,
+def _visualize_from_files(
+    parts_file: Path,
+    artic_file: Path,
+    mesh_file: Path,
+    label: str,
     color_mode: str = "part",
     show_connectivity: bool = True,
     show_joints: bool = True,
-    verbose: bool = True
+    verbose: bool = True,
 ):
-    """
-    Main visualization function.
-    
-    Args:
-        scene_id: Scene identifier (e.g., "0a5c013435")
-        articulate3d_dir: Path to articulate3d raw data directory
-        scannet_dir: Path to ScanNet root directory
-        color_mode: "part" or "object"
-        show_connectivity: Whether to draw connectivity edges
-        show_joints: Whether to draw articulation overlays
-        verbose: Print debug information
-    """
-    # Resolve file paths
-    parts_file = articulate3d_dir / f"{scene_id}_parts.json"
-    artic_file = articulate3d_dir / f"{scene_id}_artic.json"
-    mesh_file = scannet_dir / "data" / scene_id / "scans" / "mesh_aligned_0.05.ply"
-    
+    """Core visualization — accepts resolved file paths directly."""
     # Validate existence
     errors = []
     if not parts_file.exists():
@@ -656,39 +648,39 @@ def visualize_articulate3d_scene(
         errors.append(f"Articulation file not found: {artic_file}")
     if not mesh_file.exists():
         errors.append(f"Mesh file not found: {mesh_file}")
-    
+
     if errors:
         print("Error: Missing required files:")
         for err in errors:
             print(f"  {err}")
         return
-    
+
     if verbose:
-        print(f"Loading scene {scene_id}")
+        print(f"Loading {label}")
         print(f"  Parts: {parts_file}")
         print(f"  Articulations: {artic_file}")
         print(f"  Mesh: {mesh_file}")
-    
+
     # Load annotations
     parts_data = load_parts_annotation(parts_file)
     artic_data = load_articulation_annotation(artic_file)
     mesh = load_mesh(mesh_file)
-    
+
     # Process annotations
     part_id_to_anno, object_id_to_parts, part_id_to_verts = process_parts_annotations(parts_data)
     part_id_to_artic = process_articulation_annotations(artic_data)
-    
+
     if verbose:
         print(f"Loaded {len(part_id_to_anno)} parts and {len(part_id_to_artic)} articulations")
-    
+
     # Build segmented point cloud
     pcd = build_segmented_point_cloud(mesh, part_id_to_verts, part_id_to_anno, color_mode)
     geometries = [pcd]
-    
+
     # Compute scene diagonal for scaling
     vertices = np.array(mesh.vertices)
     scene_diag = float(np.linalg.norm(vertices.max(axis=0) - vertices.min(axis=0)))
-    
+
     # Draw connectivity
     if show_connectivity:
         parent_map = infer_label_hierarchy(part_id_to_anno)
@@ -705,18 +697,18 @@ def visualize_articulate3d_scene(
             geometries.extend(conn_geometries)
             if verbose:
                 print(f"Inferred {len(edges)} connectivity edges from label hierarchy")
-    
+
     # Draw articulations
     if show_joints:
         joint_geoms = render_articulations(part_id_to_artic, part_id_to_anno, scene_diag)
         geometries.extend(joint_geoms)
         if verbose:
             print(f"Rendered {len(part_id_to_artic)} articulation joints")
-    
+
     # Print summary
     if verbose:
         print("\n" + "="*60)
-        print(f"Scene: {scene_id}")
+        print(f"Scene: {label}")
         print(f"Total vertices: {len(vertices)}")
         print(f"Annotated parts: {len(part_id_to_anno)}")
         print(f"Objects: {len(object_id_to_parts)}")
@@ -734,13 +726,63 @@ def visualize_articulate3d_scene(
             print("  - Red: rotation joints")
             print("  - Blue: translation joints")
             print("  - Circular ring: indicates rotational motion")
-    
+
     # Launch viewer
     o3d.visualization.draw_geometries(
         geometries,
-        window_name=f"Articulate3D Ground Truth: {scene_id}",
+        window_name=f"Articulate3D Ground Truth: {label}",
         width=1280,
-        height=960
+        height=960,
+    )
+
+
+def visualize_articulate3d_scene(
+    scene_id: str,
+    articulate3d_dir: Path,
+    scannet_dir: Path,
+    color_mode: str = "part",
+    show_connectivity: bool = True,
+    show_joints: bool = True,
+    verbose: bool = True,
+):
+    """Visualize a full articulate3d scene (original dataset layout)."""
+    parts_file = articulate3d_dir / f"{scene_id}_parts.json"
+    artic_file = articulate3d_dir / f"{scene_id}_artic.json"
+    mesh_file = scannet_dir / "data" / scene_id / "scans" / "mesh_aligned_0.05.ply"
+    _visualize_from_files(
+        parts_file, artic_file, mesh_file, scene_id,
+        color_mode=color_mode,
+        show_connectivity=show_connectivity,
+        show_joints=show_joints,
+        verbose=verbose,
+    )
+
+
+def visualize_occ_scene(
+    view_id: str,
+    occ_dir: Path,
+    color_mode: str = "part",
+    show_connectivity: bool = True,
+    show_joints: bool = True,
+    verbose: bool = True,
+):
+    """Visualize a cropped OccArticulate3d view.
+
+    Expects the structured layout produced by crop_groundtruth.py:
+        occ_dir/scans/{view_id}/{view_id}_parts.json
+        occ_dir/scans/{view_id}/{view_id}_artic.json
+        occ_dir/scans/{view_id}/mesh_aligned_0.05.ply
+    """
+    scan_dir = occ_dir / "scans" / view_id
+    parts_file = scan_dir / f"{view_id}_parts.json"
+    artic_file = scan_dir / f"{view_id}_artic.json"
+    mesh_file = scan_dir / "mesh_aligned_0.05.ply"
+    _visualize_from_files(
+        parts_file, artic_file, mesh_file, view_id,
+        color_mode=color_mode,
+        show_connectivity=show_connectivity,
+        show_joints=show_joints,
+        verbose=verbose,
     )
 
 
@@ -752,93 +794,122 @@ def main():
     parser = argparse.ArgumentParser(
         description="Visualize articulate3d ground truth annotations in 3D"
     )
-    parser.add_argument(
+
+    # --- dataset selection (mutually exclusive) ---
+    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument(
         "--scene-id",
         type=str,
-        default="0a5c013435",
-        help="Scene identifier (default: 0a5c013435)"
+        metavar="SCENE_ID",
+        help="Full-scene ID for original articulate3d layout (e.g. 0a5c013435)",
     )
+    mode_group.add_argument(
+        "--view-id",
+        type=str,
+        metavar="VIEW_ID",
+        help="View ID for cropped OccArticulate3d layout (e.g. 0a5c013435_1)",
+    )
+
+    # --- original articulate3d paths ---
     parser.add_argument(
         "--articulate3d-dir",
         type=Path,
         default=Path("data/raw/articulate3d"),
-        help="Path to articulate3d raw data directory"
+        help="Path to articulate3d raw data directory (used with --scene-id)",
     )
     parser.add_argument(
         "--scannet-dir",
         type=Path,
         required=False,
-        help="Path to ScanNet root directory (parent of 'data' folder)"
+        help="Path to ScanNet root (parent of 'data' folder, used with --scene-id)",
     )
+
+    # --- OccArticulate3d paths ---
+    parser.add_argument(
+        "--occ-dir",
+        type=Path,
+        default=Path("data/raw/OccArticulate3d"),
+        help="Path to OccArticulate3d dataset root (used with --view-id)",
+    )
+
+    # --- display options ---
     parser.add_argument(
         "--color-mode",
         type=str,
         choices=["part", "object"],
         default="part",
-        help="Segmentation coloring mode (default: part)"
+        help="Segmentation coloring mode (default: part)",
     )
     parser.add_argument(
         "--show-connectivity",
         action="store_true",
         default=True,
-        help="Draw inferred part connectivity edges"
+        help="Draw inferred part connectivity edges",
     )
     parser.add_argument(
         "--hide-connectivity",
         action="store_false",
         dest="show_connectivity",
-        help="Hide connectivity edges"
+        help="Hide connectivity edges",
     )
     parser.add_argument(
         "--show-joints",
         action="store_true",
         default=True,
-        help="Draw articulation joints"
+        help="Draw articulation joints",
     )
     parser.add_argument(
         "--hide-joints",
         action="store_false",
         dest="show_joints",
-        help="Hide articulation overlays"
+        help="Hide articulation overlays",
     )
-    
+
     args = parser.parse_args()
-    
-    # Use ScanNet directory from CLI, config, or auto-detect
-    scannet_dir = args.scannet_dir
-    if scannet_dir is None:
-        # Try configured SCANNET_ROOT first, then common locations
-        candidates = [
-            SCANNET_ROOT,
-            Path("ScanNet"),
-            Path("..") / "ScanNet",
-            Path("/mnt/Data/ScanNet"),
-            Path.home() / "data" / "ScanNet",
-        ]
-        for cand in candidates:
-            if (cand / "data").exists():
-                scannet_dir = cand
-                print(f"Using ScanNet directory: {scannet_dir}")
-                break
-        
-        if scannet_dir is None:
-            print("Error: ScanNet directory not found.")
-            print("  - Configure SCANNET_ROOT at top of script")
-            print("  - Or specify --scannet-dir on command line")
-            return
-    
-    scannet_dir = Path(scannet_dir).resolve()
-    articulate3d_dir = args.articulate3d_dir.resolve()
-    
-    visualize_articulate3d_scene(
-        scene_id=args.scene_id,
-        articulate3d_dir=articulate3d_dir,
-        scannet_dir=scannet_dir,
+
+    kwargs = dict(
         color_mode=args.color_mode,
         show_connectivity=args.show_connectivity,
         show_joints=args.show_joints,
-        verbose=True
+        verbose=True,
     )
+
+    if args.view_id:
+        # --- OccArticulate3d (cropped) ---
+        visualize_occ_scene(
+            view_id=args.view_id,
+            occ_dir=args.occ_dir.resolve(),
+            **kwargs,
+        )
+    else:
+        # --- original articulate3d ---
+        scannet_dir = args.scannet_dir
+        if scannet_dir is None:
+            candidates = [
+                SCANNET_ROOT,
+                Path("ScanNet"),
+                Path("..") / "ScanNet",
+                Path("/mnt/Data/ScanNet"),
+                Path.home() / "data" / "ScanNet",
+            ]
+            for cand in candidates:
+                if (cand / "data").exists():
+                    scannet_dir = cand
+                    print(f"Using ScanNet directory: {scannet_dir}")
+                    break
+
+        if scannet_dir is None:
+            print("Error: ScanNet directory not found.")
+            print("  - Set SCANNET_ROOT environment variable")
+            print("  - Or specify --scannet-dir on command line")
+            return
+
+        visualize_articulate3d_scene(
+            scene_id=args.scene_id,
+            articulate3d_dir=args.articulate3d_dir.resolve(),
+            scannet_dir=Path(scannet_dir).resolve(),
+            **kwargs,
+        )
 
 
 if __name__ == "__main__":

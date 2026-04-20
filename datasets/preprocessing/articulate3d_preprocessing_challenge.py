@@ -356,16 +356,17 @@ class SceneParser:
         
         # load annotations
         if self.mode != "test" or gt_annos_testset:
-            usda_files = [f for f in os.listdir(scene_folder) if f.endswith('.usda')] # get the file with ".usda" extension as usda file
-            self.usda_file = osp.join(self.scene_folder, usda_files[0]) 
-            # load the usda file
-            self.usda_parser = USDAParser(self.usda_file, interaction_as_movement, exclude_stuff)
-            ## get articulations from usda
-            self.articulation_parts = self.usda_parser.get_articulations()
-            
+            # Load parts annotation to get partId -> vertIndices mapping
+            parts_file = [f for f in os.listdir(scene_folder) if f.endswith('_parts.json')][0]
+            parts_anno = json.load(open(osp.join(scene_folder, parts_file)))
+            self._parts_vert_indices = {
+                ann['partId']: ann['vertIndices']
+                for ann in parts_anno['data']['annotations']
+            }
+
             # load articulation parts and params
             print("scene_folder: ", scene_folder)
-            articulation_file = [f for f in os.listdir(scene_folder) if f.endswith('.json')][0]
+            articulation_file = [f for f in os.listdir(scene_folder) if f.endswith('_artic.json')][0]
             articulation_file = osp.join(scene_folder, articulation_file)
             encoding = detect_encoding(articulation_file)
             articulation_anno = None
@@ -384,8 +385,13 @@ class SceneParser:
                     'sem_id': sem_id,
                     'axis': axis,
                     'origin': origin
-                }   
-                
+                }
+            # Build articulation_parts: each pid is its own movable (no USDA hierarchy)
+            self.articulation_parts = [
+                {'interactable_id': pid, 'movable_id': pid, 'is_hierarchy_mov': False, 'trace_list': [pid]}
+                for pid in self.articulation_params.keys()
+            ]
+
         # load mesh file
         self.mesh_file = osp.join(scene_folder, 'mesh_aligned_0.05.ply')
         self.mesh = o3d.io.read_point_cloud(self.mesh_file)
@@ -403,7 +409,17 @@ class SceneParser:
         self.mesh.estimate_normals()
         self.mesh_normals = np.array(self.mesh.normals)
         self.mesh_kdtree = cKDTree(self.mesh_points)
-        
+
+        # Build part vertex positions from original mesh (before downsampling)
+        if self.mode != "test" or gt_annos_testset:
+            mesh_full = o3d.io.read_point_cloud(self.mesh_file)
+            full_vertices = np.array(mesh_full.points)
+            self.part_vertices = {
+                pid: full_vertices[indices]
+                for pid, indices in self._parts_vert_indices.items()
+                if len(indices) > 0
+            }
+
     def get_data(self, ignore_index=0, gt_annos_testset = False):
         num_points = self.mesh_points.shape[0]
         sem_gt = np.ones(num_points, dtype=np.int32) * ignore_index
@@ -452,21 +468,21 @@ class SceneParser:
         sem_gt, inst_gt, inter_gt, articulation_gt
         
     def get_subset_pcl_indexs(self, mesh_id, downsample_voxel_size=0.01, tolerance = 2e-2):
-        mesh_path = self.usda_parser.mesh_id_to_path[mesh_id]
-        subset_mesh = self.usda_parser.points[mesh_path]
+        if mesh_id not in self.part_vertices:
+            return np.array([], dtype=np.int32)
+        subset_mesh = self.part_vertices[mesh_id]
         subset_pcl = o3d.geometry.PointCloud()
         subset_pcl.points = o3d.utility.Vector3dVector(subset_mesh)
         subset_pcl = subset_pcl.voxel_down_sample(voxel_size=downsample_voxel_size)
         subset_pcl_points = np.array(subset_pcl.points)
-        
+
         indices = []
         for point in subset_pcl_points:
-            # Find the closest point in the original point cloud
+            # Find the closest point in the downsampled point cloud
             dist, index = self.mesh_kdtree.query(point)
-            # Check if the point is the same
             if dist < tolerance:
                 indices.append(index)
-        return np.array(list(set(indices))).astype(np.int32)    
+        return np.array(list(set(indices))).astype(np.int32)
 
 class Articulate3DPreprocessing(BasePreprocessing):
     def __init__(
