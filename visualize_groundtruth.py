@@ -352,6 +352,8 @@ def build_segmented_point_cloud(
                 if object_id is not None and object_id in unique_object_ids:
                     color_idx = unique_object_ids.index(object_id)
                     colors[vid] = object_colors[color_idx]
+    elif color_mode == "original":
+        colors = mesh.vertex_colors 
     else:
         # Color by part ID (default)
         unique_part_ids = sorted([pid for pid in part_id_to_anno.keys()])
@@ -836,8 +838,8 @@ def main():
     parser.add_argument(
         "--color-mode",
         type=str,
-        choices=["part", "object"],
-        default="part",
+        choices=["part", "object", "original"],
+        default="original",
         help="Segmentation coloring mode (default: part)",
     )
     parser.add_argument(
